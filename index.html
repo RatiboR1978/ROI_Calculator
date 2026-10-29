@@ -6,6 +6,7 @@
 <title>Калькулятор окупаемости курса</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -25,7 +26,7 @@ input,select,textarea{font:inherit;color:inherit}
 .nojs b{color:#fff}
 .pill{display:inline-block;padding:6px 12px;border:1px solid #3d4a1f;border-radius:999px;color:var(--acc);font-size:11px;font-weight:700;letter-spacing:.12em;background:#141a0a}
 .top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}
-.top-actions{display:flex;gap:8px}
+.top-actions{display:flex;flex-wrap:wrap;gap:8px}
 .btn{border:1px solid var(--line);background:var(--card2);border-radius:10px;padding:8px 14px;font-weight:600;font-size:13px}
 .btn:hover{border-color:#3a3f47}
 .btn.acc{background:var(--acc);color:var(--acc-ink);border-color:var(--acc)}
@@ -86,7 +87,8 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
 .eq-col .m{font-size:11px;color:var(--muted)}
 .quick{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px;font-size:12px;color:var(--muted)}
 .quick input{width:52px;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:3px 6px;text-align:right;font-family:var(--mono);font-size:12px}
-.reset-row{display:flex;justify-content:flex-end;margin-top:12px}
+.reset-row{display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:8px;margin-top:12px}
+.saved-note{font-size:12px;color:var(--dim);margin-right:auto}
 
 .tbl-wrap{overflow-x:auto;border-radius:10px}
 table{border-collapse:collapse;width:100%;font-size:12px}
@@ -195,6 +197,7 @@ body.paper.wide .sens{font-size:10px}
     <span class="pill">ФИНАНСОВАЯ МОДЕЛЬ ЗАПУСКА КУРСА</span>
     <div class="top-actions">
       <button class="btn acc" id="btnPdf">Скачать PDF</button>
+      <button class="btn acc" id="btnXlsx">Скачать Excel</button>
       <button class="btn" id="btnPrint">Печать</button>
     </div>
   </div>
@@ -226,7 +229,7 @@ body.paper.wide .sens{font-size:10px}
       </div>
       <div id="groupsR"></div>
     </div>
-    <div class="reset-row"><button class="btn sm danger" id="btnZero">Обнулить значения</button></div>
+    <div class="reset-row"><span class="saved-note">Настройки запоминаются в этом браузере</span><button class="btn sm" id="btnPreset">Вернуть пример</button><button class="btn sm danger" id="btnZero">Обнулить значения</button></div>
   </div>
 
   <div class="card full">
@@ -412,10 +415,34 @@ const fromUi = (p, v) => p.pct ? v / 100 : v;
 const fmtUi = (p, v) => p.pct ? minus(nf1.format(v * 100)).replace(',0', '') + '%' : minus(nf0.format(v)) + (p.unit ? ' ' + p.unit : '');
 
 // ---------- Состояние ----------
-// Ничего не сохраняется: пользователь настраивает курс и выгружает PDF.
+// Настройки (название, горизонт, вводные, сценарий) запоминаются в браузере пользователя
+// и восстанавливаются при следующем открытии. Если хранилище недоступно, страница просто
+// открывается со стартовыми значениями.
 const clone = o => JSON.parse(JSON.stringify(o));
 const state = {name: '', horizon: 6, inputs: clone(PRESET_INPUTS)};
 let scenario = 'base';
+
+const STORE_KEY = 'roi-calculator:v1';
+function loadSaved() {
+  let saved = null;
+  try { saved = JSON.parse(window.localStorage.getItem(STORE_KEY)); } catch (e) { return; }
+  if (!saved || typeof saved !== 'object') return;
+  if (typeof saved.name === 'string') state.name = saved.name.slice(0, 120);
+  const h = Number(saved.horizon);
+  if (isFinite(h)) state.horizon = Math.min(12, Math.max(3, Math.round(h)));
+  if (SCENARIOS[saved.scenario]) scenario = saved.scenario;
+  PARAMS.forEach(p => {
+    const src = saved.inputs && Array.isArray(saved.inputs[p.key]) ? saved.inputs[p.key] : [];
+    state.inputs[p.key] = Array.from({length: MONTHS}, (_, i) =>
+      typeof src[i] === 'number' && isFinite(src[i]) && src[i] >= 0 ? src[i] : PRESET_INPUTS[p.key][i]);
+  });
+}
+function saveNow() {
+  try { window.localStorage.setItem(STORE_KEY, JSON.stringify({name: state.name, horizon: state.horizon, inputs: state.inputs, scenario})); } catch (e) {}
+}
+let saveTimer = null;
+function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 300); }
+window.addEventListener('pagehide', saveNow);
 
 // ---------- Ввод ----------
 const groupsEl = document.getElementById('groups');
@@ -550,6 +577,12 @@ document.getElementById('btnZero').addEventListener('click', () => {
     syncInputs(); renderAll(false);
   });
 });
+document.getElementById('btnPreset').addEventListener('click', () => {
+  confirmModal('Вернуть пример?', 'Все вводные, горизонт и сценарий вернутся к стартовому примеру. Название курса останется.', 'Вернуть', () => {
+    state.inputs = clone(PRESET_INPUTS); state.horizon = 6; scenario = 'base';
+    buildInputs(); renderAll(false);
+  });
+});
 
 // ---------- Сценарии ----------
 function renderChips() {
@@ -637,6 +670,7 @@ function renderAll(full = true) {
   renderSens(sc);
   renderScenarios();
   renderBasis(noExtras);
+  scheduleSave();
 }
 
 function renderHeader() {
@@ -823,7 +857,7 @@ function renderBasis(noExtras) {
 
 // ---------- Название курса ----------
 const nameEl = document.getElementById('courseName');
-nameEl.addEventListener('input', () => { state.name = nameEl.value; renderHeader(); });
+nameEl.addEventListener('input', () => { state.name = nameEl.value; renderHeader(); scheduleSave(); });
 nameEl.addEventListener('keydown', e => { if (e.key === 'Enter') nameEl.blur(); });
 nameEl.addEventListener('blur', () => { state.name = nameEl.value.trim(); renderHeader(); });
 
@@ -869,19 +903,20 @@ const pdfOptions = () => ({
   jsPDF: {unit: 'mm', format: 'a4', orientation: state.horizon > 6 ? 'landscape' : 'portrait'},
   pagebreak: {mode: ['css'], avoid: ['.top', 'h1', '.kpi', '.econ-head', '.section-h', 'tr', '.chart', '.ad-compare', '.basis']},
 });
-const pdfName = () => `${(state.name.trim() || 'Курс').replace(/[\/:*?"<>|]+/g, '_')} — окупаемость.pdf`;
+const fileBase = () => `${(state.name.trim() || 'Курс').replace(/[\/:*?"<>|]+/g, '_')} — окупаемость`;
+const pdfName = () => fileBase() + '.pdf';
 
 // Внутри claude.ai страница не может сама скачать файл или открыть печать:
-// PDF отдаётся через сохранение claude.ai (capability downloads), кнопка «Печать» скрыта.
-// Открытая как обычный файл, страница скачивает PDF сама.
+// файлы отдаются через сохранение claude.ai (capability downloads), кнопка «Печать» скрыта.
+// Открытая как обычный файл или сайт, страница скачивает файлы сама.
 const inClaude = !!(window.claude && typeof window.claude.use === 'function');
 const claudeDownloads = inClaude ? window.claude.use('downloads').catch(() => null) : Promise.resolve(null);
-const btnPdf = document.getElementById('btnPdf'), btnPrint = document.getElementById('btnPrint');
+const btnPdf = document.getElementById('btnPdf'), btnXlsx = document.getElementById('btnXlsx'), btnPrint = document.getElementById('btnPrint');
 if (inClaude) btnPrint.hidden = true;
 
-function flashPdfButton(text) {
-  btnPdf.textContent = text;
-  setTimeout(() => { btnPdf.textContent = 'Скачать PDF'; }, 3500);
+function flashButton(btn, text, label) {
+  btn.textContent = text;
+  setTimeout(() => { btn.textContent = label; }, 3500);
 }
 function saveBlobLocally(blob, filename) {
   const a = document.createElement('a');
@@ -889,9 +924,21 @@ function saveBlobLocally(blob, filename) {
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
+async function deliverFile(blob, filename, btn, label) {
+  const downloads = await claudeDownloads;
+  if (!downloads) { saveBlobLocally(blob, filename); return; }
+  try {
+    await downloads.save({filename, data: blob});
+    flashButton(btn, 'Сохранено', label);
+  } catch (e) {
+    if (e && e.code === 'declined') return;
+    flashButton(btn, e && e.code === 'rate_limited' ? 'Подождите и нажмите ещё раз' : 'Сохранение недоступно', label);
+  }
+}
+
 async function downloadPdf() {
   if (typeof window.html2pdf !== 'function') {
-    if (inClaude) flashPdfButton('PDF не загрузился, обновите страницу'); else window.print();
+    if (inClaude) flashButton(btnPdf, 'PDF не загрузился, обновите страницу', 'Скачать PDF'); else window.print();
     return;
   }
   btnPdf.disabled = true; btnPdf.textContent = 'Готовлю PDF…';
@@ -903,24 +950,168 @@ async function downloadPdf() {
   } catch (e) { blob = null; }
   paperOff();
   btnPdf.disabled = false; btnPdf.textContent = 'Скачать PDF';
-  if (!blob) { if (inClaude) flashPdfButton('Не получилось собрать PDF'); else window.print(); return; }
-
-  const downloads = await claudeDownloads;
-  if (!downloads) { saveBlobLocally(blob, pdfName()); return; }
-  try {
-    await downloads.save({filename: pdfName(), data: blob});
-    flashPdfButton('PDF сохранён');
-  } catch (e) {
-    if (e && e.code === 'declined') return;
-    flashPdfButton(e && e.code === 'rate_limited' ? 'Подождите и нажмите ещё раз' : 'Сохранение недоступно');
-  }
+  if (!blob) { if (inClaude) flashButton(btnPdf, 'Не получилось собрать PDF', 'Скачать PDF'); else window.print(); return; }
+  await deliverFile(blob, pdfName(), btnPdf, 'Скачать PDF');
 }
+
+// ---------- Выгрузка в Excel ----------
+// Книга с теми же цифрами, что на экране (выбранный сценарий), плюс сводка по всем сценариям.
+// Значения — числа с форматом ячеек, без округления; проценты — доли с форматом «%».
+const XL = {money: '#,##0 "₽"', num0: '#,##0', num1: '#,##0.0', pct: '0.0%', ratio: '0.00'};
+const xv = (v, z) => (v === null || v === undefined || (typeof v === 'number' && !isFinite(v))) ? 'н/д' : {v, z};
+
+function addSheet(wb, name, rows, widths) {
+  const ws = XLSX.utils.aoa_to_sheet(rows.map(r => r.map(c => c && typeof c === 'object' ? c.v : c)));
+  rows.forEach((r, ri) => r.forEach((c, ci) => {
+    if (c && typeof c === 'object' && c.z) {
+      const ref = XLSX.utils.encode_cell({r: ri, c: ci});
+      if (ws[ref]) ws[ref].z = c.z;
+    }
+  }));
+  ws['!cols'] = widths.map(w => ({wch: w}));
+  XLSX.utils.book_append_sheet(wb, ws, name);
+}
+
+function buildWorkbook() {
+  const N = state.horizon, sc = SCENARIOS[scenario];
+  const res = calculate(state.inputs, N, {conv: sc.conv, cpr: sc.cpr});
+  const {rows, T} = res;
+  const months = rows.map((_, i) => `М${i + 1}`);
+  const noExtras = ['tax','refund','fixed','support'].every(k => state.inputs[k].slice(0, N).every(v => v === 0));
+  const wb = XLSX.utils.book_new();
+  const payback = r => r.payback === null ? `не окупается за ${N} мес.` : `Месяц ${r.payback + 1}`;
+
+  // Итоги
+  addSheet(wb, 'Итоги', [
+    ['Калькулятор окупаемости курса'],
+    ['Курс', state.name.trim() || '—'],
+    ['Дата расчёта', new Date().toLocaleDateString('ru-RU')],
+    ['Сценарий', `${sc.label} (${multLabel(sc)})`],
+    ['Горизонт, мес.', N],
+    [],
+    ['Выручка', xv(T.rev, XL.money)],
+    ['Результат', xv(T.result, XL.money)],
+    ['Маржа', T.rev > 0 ? xv(T.result / T.rev, XL.pct) : 'н/д'],
+    ['Окупаемость', payback(res)],
+    ['Макс. просадка', res.drawdown ? xv(res.drawdown.value, XL.money) : xv(0, XL.money), res.drawdown ? `в месяце ${res.drawdown.month + 1}` : ''],
+    ['Стартовые вложения (разработка + реклама М1)', xv(res.startInvest, XL.money)],
+    ['Оплат', xv(T.paid, XL.num1)],
+    ['Стоимость оплаты с рекламы', xv(T.costPerPaidAd, XL.money)],
+    ['Выручка / расходы на рекламу', xv(T.romi, XL.ratio)],
+    [],
+    [noExtras ? 'Налоги, возвраты, команда и сопровождение равны нулю — результат не является чистой прибылью.' : 'Модель не является гарантией продаж.'],
+  ], [44, 18, 16]);
+
+  // По месяцам: экономика и воронка
+  const line = (label, key, z) => [label, ...rows.map(r => xv(r[key], z)), key === 'cum' ? xv(T.cum, z) : xv(T[key], z)];
+  addSheet(wb, 'По месяцам', [
+    [`Экономика по месяцам · сценарий: ${sc.label}`],
+    ['Показатель, ₽', ...months, 'Итого'],
+    line('Выручка', 'rev', XL.money),
+    line('  из базы', 'rev_b', XL.money),
+    line('  с рекламы', 'rev_a', XL.money),
+    line('Реклама', 'budget', XL.money),
+    line('Разработка', 'dev', XL.money),
+    line('Доп. расходы', 'extra', XL.money),
+    line('Результат', 'result', XL.money),
+    line('Накопленный результат', 'cum', XL.money),
+    [],
+    ['Воронка, чел', ...months, 'Итого'],
+    line('Регистрации из базы', 'reg_b', XL.num1),
+    line('Регистрации с рекламы', 'reg_a', XL.num1),
+    line('Пришли из базы', 'came_b', XL.num1),
+    line('Пришли с рекламы', 'came_a', XL.num1),
+    line('Заказы из базы', 'ord_nb', XL.num1),
+    line('Заказы с рекламы', 'ord_na', XL.num1),
+    line('Оплаты из базы', 'paid_b', XL.num1),
+    line('Оплаты с рекламы', 'paid_a', XL.num1),
+    line('Всего оплат', 'paid', XL.num1),
+  ], [26, ...months.map(() => 13), 14]);
+
+  // Сценарии
+  const keys = Object.keys(SCENARIOS);
+  const R = Object.fromEntries(keys.map(k => [k, calculate(state.inputs, N, {conv: SCENARIOS[k].conv, cpr: SCENARIOS[k].cpr})]));
+  const srow = (label, f) => [label, ...keys.map(k => f(R[k]))];
+  addSheet(wb, 'Сценарии', [
+    [`Сводка по сценариям · ${N} мес.`],
+    ['Показатель', ...keys.map(k => SCENARIOS[k].label)],
+    ['Множители', ...keys.map(k => multLabel(SCENARIOS[k]))],
+    srow('Выручка', r => xv(r.T.rev, XL.money)),
+    srow('  из базы', r => xv(r.T.rev_b, XL.money)),
+    srow('  с рекламы', r => xv(r.T.rev_a, XL.money)),
+    srow('Расходы', r => xv(r.T.budget + r.T.dev + r.T.extra, XL.money)),
+    srow('  реклама', r => xv(r.T.budget, XL.money)),
+    srow('  разработка', r => xv(r.T.dev, XL.money)),
+    srow('  доп. расходы', r => xv(r.T.extra, XL.money)),
+    srow('Результат', r => xv(r.T.result, XL.money)),
+    srow('Разница с базовым', r => xv(r.T.result - R.base.T.result, XL.money)),
+    srow('Маржа', r => r.T.rev > 0 ? xv(r.T.result / r.T.rev, XL.pct) : 'н/д'),
+    srow('Регистраций', r => xv(r.T.reg_b + r.T.reg_a, XL.num0)),
+    srow('Оплат', r => xv(r.T.paid, XL.num1)),
+    srow('Окупаемость', r => payback(r)),
+    srow('Макс. просадка', r => xv(r.drawdown ? r.drawdown.value : 0, XL.money)),
+    srow('Месяц макс. просадки', r => r.drawdown ? `М${r.drawdown.month + 1}` : '—'),
+    srow('Стоимость оплаты с рекламы', r => xv(r.T.costPerPaidAd, XL.money)),
+    srow('Выручка / расходы на рекламу', r => xv(r.T.romi, XL.ratio)),
+    [],
+    ['Накопленный результат, ₽', ...months],
+    ...keys.map(k => [SCENARIOS[k].label, ...R[k].rows.map(r => xv(r.cum, XL.money))]),
+  ], [30, 22, 22, 22, ...months.map(() => 13)]);
+
+  // Вводные — базовые значения курса (без множителей сценария)
+  addSheet(wb, 'Вводные', [
+    ['Вводные курса (без множителей сценария)'],
+    ['Параметр', 'Группа', ...months],
+    ...PARAMS.map(p => [
+      p.name,
+      GROUPS.find(g => g.id === p.group).title,
+      ...state.inputs[p.key].slice(0, N).map(v => xv(v, p.pct ? XL.pct : p.unit === '₽' ? XL.money : XL.num0)),
+    ]),
+  ], [32, 26, ...months.map(() => 12)]);
+
+  // Экономика рекламы
+  addSheet(wb, 'Реклама', [
+    [`Экономика рекламы · сценарий: ${sc.label}`],
+    ['Показатель', ...months, 'Итого'],
+    ['Стоимость оплаты с рекламы, ₽', ...rows.map(r => xv(r.costPerPaidAd, XL.money)), xv(T.costPerPaidAd, XL.money)],
+    ['Выручка / расходы на рекламу', ...rows.map(r => xv(r.romi, XL.ratio)), xv(T.romi, XL.ratio)],
+    ['Остаток от рекламы до прочих затрат, ₽', ...rows.map(r => xv(r.adMargin, XL.money)), xv(T.adMargin, XL.money)],
+    ['Предельная стоимость регистрации, ₽', ...rows.map(r => xv(r.maxCpr, XL.money))],
+    ['Текущая стоимость регистрации, ₽', ...rows.map(r => xv(r.cpr, XL.money))],
+  ], [38, ...months.map(() => 13), 14]);
+
+  // Чувствительность
+  const lbl = d => d === 0 ? 'как в модели' : (d > 0 ? '+' : '−') + Math.abs(d * 100) + '%';
+  addSheet(wb, 'Чувствительность', [
+    [`Результат за ${N} мес. · сценарий: ${sc.label}`],
+    ['Строки — стоимость регистрации с рекламы, столбцы — конверсия «заказ → оплата»'],
+    ['Регистрация \\ оплата', ...SENS.map(lbl)],
+    ...SENS.map(dc => [lbl(dc), ...SENS.map(dp =>
+      xv(calculate(state.inputs, N, {conv: sc.conv, cpr: sc.cpr * (1 + dc), pay: 1 + dp}).T.result, XL.money))]),
+  ], [22, 16, 16, 16, 16, 16]);
+
+  return wb;
+}
+
+async function downloadXlsx() {
+  if (!window.XLSX) { flashButton(btnXlsx, 'Excel не загрузился, обновите страницу', 'Скачать Excel'); return; }
+  let blob = null;
+  try {
+    const out = XLSX.write(buildWorkbook(), {bookType: 'xlsx', type: 'array'});
+    blob = new Blob([out], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  } catch (e) { blob = null; }
+  if (!blob) { flashButton(btnXlsx, 'Не получилось собрать Excel', 'Скачать Excel'); return; }
+  await deliverFile(blob, fileBase() + '.xlsx', btnXlsx, 'Скачать Excel');
+}
+
 btnPdf.addEventListener('click', downloadPdf);
+btnXlsx.addEventListener('click', downloadXlsx);
 btnPrint.addEventListener('click', () => window.print());
-// В claude.ai, где сохранение файлов недоступно, кнопку PDF прячем.
-claudeDownloads.then(d => { if (inClaude && !d) btnPdf.hidden = true; });
+// В claude.ai, где сохранение файлов недоступно, кнопки выгрузки прячем.
+claudeDownloads.then(d => { if (inClaude && !d) btnPdf.hidden = btnXlsx.hidden = true; });
 
 // ---------- Старт ----------
+loadSaved();
 buildInputs();
 renderAll();
 </script>
