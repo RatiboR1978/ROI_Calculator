@@ -1,0 +1,850 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Калькулятор окупаемости курса</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#0b0c0e; --card:#14161a; --card2:#1a1d22; --line:#262a30; --text:#eef0f3; --muted:#9097a1; --dim:#6b717b;
+  --acc:#c8f560; --acc-ink:#0b0c0e; --neg:#ff6b6b; --blue:#6fc7ff; --violet:#a98bff;
+  --base:#6fc7ff; --ads:#c8f560;
+  --mono:'JetBrains Mono',ui-monospace,Consolas,monospace; --sans:Inter,system-ui,-apple-system,'Segoe UI',sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.45}
+body{overflow-x:hidden}
+.wrap{max-width:1360px;margin:0 auto;padding:28px 24px 60px}
+button{font:inherit;color:inherit;cursor:pointer}
+input,select,textarea{font:inherit;color:inherit}
+.nojs{margin:0 0 20px;padding:14px 16px;border-radius:12px;background:#3a1d0a;border:1px solid #a8541c;color:#ffd9b8;font-size:15px;line-height:1.5}
+.nojs b{color:#fff}
+.pill{display:inline-block;padding:6px 12px;border:1px solid #3d4a1f;border-radius:999px;color:var(--acc);font-size:11px;font-weight:700;letter-spacing:.12em;background:#141a0a}
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}
+.top-actions{display:flex;gap:8px}
+.btn{border:1px solid var(--line);background:var(--card2);border-radius:10px;padding:8px 14px;font-weight:600;font-size:13px}
+.btn:hover{border-color:#3a3f47}
+.btn.acc{background:var(--acc);color:var(--acc-ink);border-color:var(--acc)}
+.btn.sm{padding:5px 10px;font-size:12px;border-radius:8px}
+.btn.danger{color:var(--neg)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+h1{font-size:30px;line-height:1.15;margin:18px 0 6px;font-weight:700}
+.title-name{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.name-input{font-size:30px;font-weight:700;background:transparent;border:1px dashed transparent;border-radius:8px;padding:0 4px;margin-left:-5px;max-width:100%;
+  background-image:linear-gradient(90deg,var(--acc),var(--blue) 55%,var(--violet));-webkit-background-clip:text;background-clip:text;color:transparent;caret-color:var(--acc)}
+.name-input:hover{border-color:var(--line)}
+.name-input:focus{outline:none;border-color:#3d4a1f}
+.name-input::placeholder{color:var(--dim);-webkit-text-fill-color:var(--dim)}
+.sub{color:var(--muted);max-width:640px;margin:4px 0 0}
+
+.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin:24px 0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}
+.kpi .lbl,.cap{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.kpi .val{font-family:var(--mono);font-size:22px;font-weight:700;margin:6px 0 2px;white-space:nowrap}
+.kpi .hint{font-size:12px;color:var(--dim)}
+.pos{color:var(--acc)} .neg{color:var(--neg)}
+
+.section-h{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:12px}
+.section-h h2{font-size:13px;letter-spacing:.1em;text-transform:uppercase;margin:0}
+.section-h p{margin:2px 0 0;color:var(--muted);font-size:13px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.chip{border:1px solid var(--line);background:var(--card2);border-radius:999px;padding:6px 14px;font-size:13px}
+.chip.on{background:var(--acc);color:var(--acc-ink);border-color:var(--acc);font-weight:600}
+.summary{color:var(--muted);font-size:12px}
+.scen-note{display:none;margin-top:10px;padding:8px 12px;border-radius:10px;background:#1d2410;border:1px solid #3d4a1f;color:var(--acc);font-size:12px}
+.scen-note.show{display:block}
+
+.inputs-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 16px;align-items:start}
+.group{background:var(--card2);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px}
+.group-h{display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:6px}
+.group-h .t{font-weight:700;font-size:12px;letter-spacing:.1em;text-transform:uppercase}
+.group-h .s{font-size:12px;color:var(--muted);font-family:var(--mono)}
+.param{padding:10px 0;border-top:1px solid var(--line)}
+.param:first-of-type{border-top:0}
+.prow{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr) 118px;gap:12px;align-items:center}
+.pname{font-weight:600;font-size:13px}
+.pdesc{font-size:11px;color:var(--dim)}
+.numbox{display:flex;align-items:center;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:0 8px}
+.numbox input{width:100%;background:transparent;border:0;padding:6px 0;font-family:var(--mono);font-size:13px;text-align:right;outline:none;min-width:0}
+.numbox span{color:var(--dim);font-size:12px;margin-left:4px}
+.mixed{font-size:11px;color:#ffb86b;font-family:var(--mono)}
+.toggle{background:none;border:0;color:var(--blue);font-size:12px;padding:4px 0;margin-top:2px}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:4px;background:var(--line);border-radius:4px;outline:none;margin:0}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--acc);border:2px solid var(--bg);box-shadow:0 0 0 1px var(--acc)}
+input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--acc);border:2px solid var(--bg)}
+.eq{display:none;margin-top:8px}
+.eq.open{display:block}
+.eq-cols{display:grid;gap:6px}
+.eq-col{display:flex;flex-direction:column;align-items:center;gap:6px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:6px 2px}
+.eq-col input[type=number]{width:100%;background:transparent;border:0;text-align:center;font-family:var(--mono);font-size:11px;color:var(--text);outline:none;padding:0;-moz-appearance:textfield}
+.eq-col input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
+.eq-col input[type=range]{writing-mode:vertical-lr;direction:rtl;width:4px;height:96px}
+.eq-col .m{font-size:11px;color:var(--muted)}
+.quick{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px;font-size:12px;color:var(--muted)}
+.quick input{width:52px;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:3px 6px;text-align:right;font-family:var(--mono);font-size:12px}
+.reset-row{display:flex;justify-content:flex-end;margin-top:12px}
+
+.tbl-wrap{overflow-x:auto;border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:12px}
+th,td{padding:7px 8px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line);font-family:var(--mono)}
+th{font-family:var(--sans);color:var(--muted);font-weight:600;font-size:11px;letter-spacing:.06em}
+td:first-child,th:first-child{text-align:left;font-family:var(--sans);position:sticky;left:0;background:var(--card);z-index:1}
+tr.sub td{color:var(--muted)} tr.sub td:first-child{padding-left:18px}
+tr.strong td{font-weight:700}
+td.pb,th.pb{box-shadow:inset 1px 0 0 var(--acc),inset -1px 0 0 var(--acc)}
+th.pb{color:var(--acc)}
+.total-col{background:#181b20}
+details.funnel{margin-top:12px}
+details.funnel summary{cursor:pointer;color:var(--blue);font-size:12px;margin-bottom:8px}
+.econ-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+.profit-box{border:1px solid #3d4a1f;background:#141a0a;border-radius:12px;padding:10px 14px;text-align:right}
+.profit-box .val{font-family:var(--mono);font-size:22px;font-weight:700}
+
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
+.full{margin-top:16px}
+.chart svg{width:100%;height:auto;display:block}
+.chart .note{font-size:12px;color:var(--dim);margin-top:8px}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--muted);margin-bottom:6px;flex-wrap:wrap}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.ad-compare{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px}
+.ad-compare .card{padding:12px;background:var(--card2)}
+.ad-compare .val{font-family:var(--mono);font-size:18px;font-weight:700;margin-top:4px}
+.warn-box{padding:10px 12px;border-radius:10px;background:#2a1414;border:1px solid #5a2626;color:#ffb3b3;font-size:12px;margin-bottom:12px}
+.sens td{text-align:center;font-weight:600}
+.sens td.cur{outline:2px solid var(--acc);outline-offset:-2px}
+.basis ul{margin:8px 0 0;padding-left:18px;color:var(--muted);font-size:12px}
+.basis li{margin:4px 0}
+.footer{color:var(--dim);font-size:12px;margin-top:16px}
+
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;padding:16px;z-index:50}
+.modal-bg.show{display:flex}
+.modal{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px;width:min(560px,100%);max-height:90vh;overflow:auto}
+.modal h3{margin:0 0 10px;font-size:16px}
+.modal p{color:var(--muted);margin:0 0 12px}
+.modal .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:14px;flex-wrap:wrap}
+
+.print-head{display:none}
+@media (max-width:1100px){.kpis{grid-template-columns:repeat(3,1fr)}}
+@media (max-width:900px){.inputs-cols{grid-template-columns:minmax(0,1fr)}}
+.card,.group{min-width:0}
+@media (max-width:700px){
+  .wrap{padding:20px 16px 40px}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .kpi .val{white-space:normal}
+  .section-h{flex-wrap:wrap}
+  .row2{grid-template-columns:minmax(0,1fr)}
+  .ad-compare{grid-template-columns:minmax(0,1fr)}
+  .prow{grid-template-columns:1fr 110px}
+  .prow .pinfo{grid-column:1 / -1}
+  h1,.name-input{font-size:24px}
+  .kpi .val{font-size:18px}
+}
+@media (max-width:420px){
+  .kpis{grid-template-columns:minmax(0,1fr)}
+  .prow{grid-template-columns:minmax(0,1fr) 96px}
+}
+/* Светлая «бумажная» версия: включается классом paper перед печатью и при скачивании PDF */
+body.paper{--bg:#fff;--card:#fff;--card2:#fff;--line:#d9dce1;--text:#111;--muted:#555;--dim:#777;--acc:#3b7d00;--neg:#c62828;--base:#3d9be0;--ads:#8cc63f;background:#fff;color:#111}
+body.paper .wrap{width:auto;max-width:none;margin:0;padding:0}
+body.paper .inputs-col,body.paper .chips,body.paper .toggle,body.paper .top-actions{display:none!important}
+body.paper .print-head{display:block;font-size:12px;color:#555;margin-top:6px}
+body.paper .name-input{color:#111;background:none;-webkit-text-fill-color:#111;border-color:transparent}
+body.paper .name-input:placeholder-shown{display:none}
+body.paper .kpis{grid-template-columns:repeat(3,minmax(0,1fr))}
+body.paper .kpi .val{white-space:normal}
+body.paper .row2{grid-template-columns:1fr 1fr}
+body.paper .ad-compare{grid-template-columns:repeat(3,minmax(0,1fr))}
+body.paper .total-col{background:#f1f3f5}
+body.paper .profit-box{background:#f4f9ec;border-color:#cfe3b0}
+body.paper .pill{background:#f4f9ec;border-color:#cfe3b0}
+body.paper details.funnel summary{display:none}
+/* Таблицы целиком помещаются в ширину листа: без прокрутки, длинные подписи переносятся */
+body.paper .tbl-wrap{overflow:visible}
+body.paper table{table-layout:fixed;font-size:10px}
+body.paper th,body.paper td{padding:5px 4px;white-space:normal;overflow-wrap:anywhere}
+body.paper td:first-child,body.paper th:first-child{position:static;width:20%}
+body.paper .sens td:first-child,body.paper .sens th:first-child{width:16%}
+/* Больше 6 месяцев: альбомный лист, числа мельче и без переноса */
+body.paper.wide table{font-size:8px}
+body.paper.wide th,body.paper.wide td{padding:4px 2px;white-space:nowrap}
+body.paper.wide td:first-child,body.paper.wide th:first-child{width:12%;white-space:normal}
+body.paper.wide .sens td:first-child,body.paper.wide .sens th:first-child{width:16%}
+body.paper.wide .sens{font-size:10px}
+@media print{body{background:#fff}.card,.group{break-inside:avoid}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <!-- Видно, только если скрипты не запустились (например, предпросмотр файла в Telegram на iPhone); скрипт удаляет этот блок. -->
+  <div class="nojs" id="nojs">
+    <b>Калькулятор не запустился.</b> Вы открыли файл в режиме просмотра, где не работают расчёты.
+    На компьютере откройте файл в браузере (Chrome, Edge, Safari). На телефоне откройте калькулятор по ссылке.
+  </div>
+  <div class="top">
+    <span class="pill">ФИНАНСОВАЯ МОДЕЛЬ ЗАПУСКА КУРСА</span>
+    <div class="top-actions">
+      <button class="btn acc" id="btnPdf">Скачать PDF</button>
+      <button class="btn" id="btnPrint">Печать</button>
+    </div>
+  </div>
+  <h1>Калькулятор окупаемости курса</h1>
+  <div class="title-name">
+    <input class="name-input" id="courseName" spellcheck="false" placeholder="Название курса" aria-label="Название курса">
+  </div>
+  <div class="print-head" id="printHead"></div>
+  <p class="sub">Двигайте ползунки по месяцам — экономика запуска пересчитывается сразу.</p>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="card inputs-col">
+    <div class="section-h"><div><h2>Вводные данные</h2><p>Ползунок или точное значение — результаты пересчитываются сразу</p></div></div>
+    <div class="chips" id="chips"></div>
+    <div class="summary" id="scenSummary"></div>
+    <div class="scen-note" id="scenNote">Сценарий применяется поверх ваших вводных: ползунки показывают базовые значения курса.</div>
+    <div class="inputs-cols" id="groups">
+      <div>
+        <div class="group">
+          <div class="group-h"><span class="t">Горизонт расчёта</span><span class="s" id="horizonLbl"></span></div>
+          <div class="prow">
+            <div class="pinfo"><div class="pname">Месяцев в расчёте</div><div class="pdesc">значения скрытых месяцев сохраняются</div></div>
+            <input type="range" id="horizon" min="3" max="12" step="1">
+            <div class="numbox"><input type="number" id="horizonNum" min="3" max="12" step="1"><span>мес</span></div>
+          </div>
+        </div>
+        <div id="groupsL"></div>
+      </div>
+      <div id="groupsR"></div>
+    </div>
+    <div class="reset-row"><button class="btn sm danger" id="btnZero">Обнулить значения</button></div>
+  </div>
+
+  <div class="card full">
+    <div class="econ-head">
+      <div class="section-h" style="margin:0"><div><h2>Экономика по месяцам</h2><p>Выручка, расходы и результат по модели</p></div></div>
+      <div class="profit-box"><div class="cap">Результат за горизонт</div><div class="val" id="econTotal"></div><div class="kpi"><div class="hint" id="econHint"></div></div></div>
+    </div>
+    <div class="tbl-wrap"><table id="econTable"></table></div>
+    <details class="funnel" id="funnelDetails"><summary>Воронка по каналам ▾</summary><div class="tbl-wrap"><table id="funnelTable"></table></div></details>
+  </div>
+
+  <div class="row2">
+    <div class="card chart">
+      <div class="section-h"><div><h2>Накопленный результат</h2></div></div>
+      <div id="chartCum"></div>
+      <div class="note" id="chartCumNote"></div>
+    </div>
+    <div class="card chart">
+      <div class="section-h"><div><h2>Выручка по каналам и расходы</h2></div></div>
+      <div class="legend"><span><i style="background:var(--base)"></i>Из базы</span><span><i style="background:var(--ads)"></i>С рекламы</span><span><i style="background:var(--neg);height:2px;vertical-align:3px"></i>Расходы</span></div>
+      <div id="chartRev"></div>
+      <div class="note">Столбики — выручка по каналам, линия — все расходы месяца: реклама, разработка и дополнительные.</div>
+    </div>
+  </div>
+
+  <div class="card full">
+    <div class="section-h"><div><h2>Экономика рекламы</h2><p>Окупает ли реклама сама себя до прочих затрат</p></div></div>
+    <div id="adWarn"></div>
+    <div class="ad-compare" id="adCompare"></div>
+    <div class="tbl-wrap"><table id="adTable"></table></div>
+  </div>
+
+  <div class="card full">
+    <div class="section-h"><div><h2>Чувствительность результата</h2><p>Результат за горизонт при изменении стоимости регистрации и конверсии «заказ → оплата»</p></div></div>
+    <div class="tbl-wrap"><table class="sens" id="sensTable"></table></div>
+    <div class="chart"><div class="note">Строки — стоимость регистрации с рекламы, столбцы — конверсия «заказ → оплата» в обоих каналах во всех месяцах (не выше 100%). Рамка — текущий сценарий.</div></div>
+  </div>
+
+  <div class="card full basis">
+    <div class="cap">Основания расчёта</div>
+    <ul id="basis"></ul>
+  </div>
+  <div class="footer">Расчёт для внутреннего планирования запуска курса. Модель не является гарантией продаж.</div>
+</div>
+
+<div class="modal-bg" id="modalBg"><div class="modal" id="modal"></div></div>
+
+<script>
+'use strict';
+document.getElementById('nojs').remove();
+const MONTHS = 12;
+
+// Параметры модели. pct: значение хранится долей (0.4), показывается в процентах.
+const GROUPS = [
+  {id:'traffic', col:'L', title:'Чек и стоимость трафика'},
+  {id:'base', col:'L', title:'Воронка — база'},
+  {id:'ads', col:'L', title:'Воронка — реклама'},
+  {id:'budget', col:'R', title:'Бюджеты и разработка'},
+  {id:'extra', col:'R', title:'Дополнительные расходы'},
+];
+const PARAMS = [
+  {key:'check', group:'traffic', name:'Средний чек', desc:'стоимость курса для одной оплаты', unit:'₽', min:5000, max:150000, step:500},
+  {key:'cpr', group:'traffic', name:'Стоимость регистрации с рекламы', desc:'сколько стоит одна регистрация из платного трафика', unit:'₽', min:50, max:2000, step:10},
+  {key:'att_b', group:'base', name:'Доходимость', desc:'доля зарегистрированных, которые пришли', pct:true, min:0, max:100, step:1},
+  {key:'ord_b', group:'base', name:'Пришедший → заказ', desc:'доля пришедших, оформивших заказ', pct:true, min:0, max:100, step:0.5},
+  {key:'pay_b', group:'base', name:'Заказ → оплата', desc:'доля заказов, которые оплатили', pct:true, min:0, max:100, step:0.5},
+  {key:'att_a', group:'ads', name:'Доходимость', desc:'доля зарегистрированных, которые пришли', pct:true, min:0, max:100, step:1},
+  {key:'ord_a', group:'ads', name:'Пришедший → заказ', desc:'доля пришедших, оформивших заказ', pct:true, min:0, max:100, step:0.5},
+  {key:'pay_a', group:'ads', name:'Заказ → оплата', desc:'доля заказов, которые оплатили', pct:true, min:0, max:100, step:0.5},
+  {key:'budget', group:'budget', name:'Рекламный бюджет', desc:'расход на платный трафик в месяц', unit:'₽', min:0, max:3000000, step:10000, eqOpen:true, quick:true},
+  {key:'reg_b', group:'budget', name:'Регистрации из базы', desc:'сколько людей из своей базы регистрируется', unit:'чел', min:0, max:5000, step:50, eqOpen:true, quick:true},
+  {key:'dev', group:'budget', name:'Разработка', desc:'разовые вложения в создание курса', unit:'₽', min:0, max:5000000, step:10000},
+  {key:'tax', group:'extra', name:'Налоги', desc:'% от выручки', pct:true, min:0, max:30, step:0.5},
+  {key:'comm', group:'extra', name:'Комиссии', desc:'платёжные сервисы, % от выручки', pct:true, min:0, max:30, step:0.5},
+  {key:'refund', group:'extra', name:'Возвраты', desc:'% от выручки', pct:true, min:0, max:30, step:0.5},
+  {key:'fixed', group:'extra', name:'Команда, платформа и прочее', desc:'постоянные расходы в месяц', unit:'₽', min:0, max:2000000, step:10000},
+  {key:'support', group:'extra', name:'Сопровождение', desc:'на одного оплатившего', unit:'₽', min:0, max:20000, step:100},
+];
+const PMAP = Object.fromEntries(PARAMS.map(p => [p.key, p]));
+const CONV_KEYS = ['att_b','ord_b','pay_b','att_a','ord_a','pay_a'];
+
+// Стартовые значения — пример из финмодели (М1–М6); М7–М12 копируют М6, разработка в них 0.
+function ext(a6, tail) { return a6.concat(Array(MONTHS - 6).fill(tail === undefined ? a6[5] : tail)); }
+const PRESET_INPUTS = {
+  check: ext([31000,31000,31000,31000,31000,31000]),
+  cpr: ext([300,300,300,300,300,300]),
+  att_b: ext([.4,.4,.4,.4,.4,.4]),
+  att_a: ext([.4,.4,.4,.4,.4,.4]),
+  ord_b: ext([.1,.1,.15,.15,.15,.15]),
+  ord_a: ext([.1,.1,.15,.15,.15,.15]),
+  pay_b: ext([.3,.3,.3,.3,.3,.3]),
+  pay_a: ext([.25,.25,.3,.3,.3,.3]),
+  budget: ext([50000,300000,400000,500000,600000,700000]),
+  reg_b: ext([1000,500,800,800,1000,1000]),
+  dev: ext([500000,0,0,0,0,0], 0),
+  tax: ext([0,0,0,0,0,0]),
+  comm: ext([.15,.15,.15,.15,.15,.15]),
+  refund: ext([0,0,0,0,0,0]),
+  fixed: ext([0,0,0,0,0,0]),
+  support: ext([0,0,0,0,0,0]),
+};
+const SCENARIOS = {
+  pess: {label:'Пессимистичный', conv:0.9, cpr:1.2},
+  base: {label:'Базовый', conv:1, cpr:1},
+  opt: {label:'Оптимистичный', conv:1.1, cpr:0.8},
+};
+const SENS = [-0.2, -0.1, 0, 0.1, 0.2];
+
+// ---------- Расчёт ----------
+// mods: conv — множитель всех конверсий, pay — доп. множитель «заказ → оплата», cpr — множитель стоимости регистрации.
+function calculate(inputs, N, mods) {
+  const m = Object.assign({conv:1, pay:1, cpr:1}, mods);
+  const cap = v => Math.min(1, v);
+  const rows = [];
+  let cum = 0;
+  for (let i = 0; i < N; i++) {
+    const g = k => inputs[k][i];
+    const cpr = g('cpr') * m.cpr;
+    const att_b = cap(g('att_b') * m.conv), ord_b = cap(g('ord_b') * m.conv), pay_b = cap(g('pay_b') * m.conv * m.pay);
+    const att_a = cap(g('att_a') * m.conv), ord_a = cap(g('ord_a') * m.conv), pay_a = cap(g('pay_a') * m.conv * m.pay);
+    const budget = g('budget'), dev = g('dev'), check = g('check');
+    const reg_b = g('reg_b');
+    const reg_a = cpr > 0 ? budget / cpr : 0;
+    const came_b = reg_b * att_b, came_a = reg_a * att_a;
+    const ord_nb = came_b * ord_b, ord_na = came_a * ord_a;
+    const paid_b = ord_nb * pay_b, paid_a = ord_na * pay_a;
+    const paid = paid_b + paid_a;
+    const rev_b = paid_b * check, rev_a = paid_a * check, rev = rev_b + rev_a;
+    const extra = rev * (g('tax') + g('comm') + g('refund')) + g('fixed') + paid * g('support');
+    const result = rev - budget - dev - extra;
+    cum += result;
+    rows.push({reg_b, reg_a, came_b, came_a, ord_nb, ord_na, paid_b, paid_a, paid, rev_b, rev_a, rev, budget, dev, extra, result, cum, check, cpr,
+      costPerPaidAd: paid_a > 0 ? budget / paid_a : null,
+      romi: budget > 0 ? rev_a / budget : null,
+      adMargin: rev_a - budget,
+      maxCpr: check * att_a * ord_a * pay_a});
+  }
+  const sum = k => rows.reduce((s, r) => s + r[k], 0);
+  const T = {};
+  ['reg_b','reg_a','came_b','came_a','ord_nb','ord_na','paid_b','paid_a','paid','rev_b','rev_a','rev','budget','dev','extra','result','adMargin'].forEach(k => T[k] = sum(k));
+  T.cum = rows.length ? rows[rows.length - 1].cum : 0;
+  T.costPerPaidAd = T.paid_a > 0 ? T.budget / T.paid_a : null;
+  T.romi = T.budget > 0 ? T.rev_a / T.budget : null;
+  // Окупаемость: первый месяц, с которого накопленный результат ≥ 0 до конца горизонта.
+  let payback = null;
+  // Без выручки окупаемость не определена (иначе нулевая модель «окупается» в М1).
+  if (T.rev > 0) for (let i = N - 1; i >= 0; i--) { if (rows[i].cum >= 0) payback = i; else break; }
+  let minCum = 0, minIdx = null;
+  rows.forEach((r, i) => { if (r.cum < minCum) { minCum = r.cum; minIdx = i; } });
+  const startInvest = N > 0 ? inputs.dev[0] + inputs.budget[0] : 0;
+  return {rows, T, payback, drawdown: minIdx === null ? null : {value: minCum, month: minIdx}, startInvest};
+}
+
+// ---------- Формат ----------
+const nf0 = new Intl.NumberFormat('ru-RU', {maximumFractionDigits:0});
+const nf1 = new Intl.NumberFormat('ru-RU', {minimumFractionDigits:1, maximumFractionDigits:1});
+const nf2 = new Intl.NumberFormat('ru-RU', {minimumFractionDigits:2, maximumFractionDigits:2});
+const minus = s => s.replace('-', '−');
+const money = v => v === null || !isFinite(v) ? 'н/д' : minus(nf0.format(Math.round(v)) + ' ₽');
+const short = v => {
+  if (v === null || !isFinite(v)) return 'н/д';
+  const a = Math.abs(v);
+  if (a >= 1e6) return minus(nf2.format(v / 1e6) + ' млн ₽');
+  if (a >= 1e3) return minus(nf0.format(Math.round(v / 1e3)) + ' тыс ₽');
+  return money(v);
+};
+const one = v => minus(nf1.format(v));
+const ratio = v => v === null || !isFinite(v) ? 'н/д' : nf2.format(v);
+const signCls = v => v > 0 ? 'pos' : v < 0 ? 'neg' : '';
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const toUi = (p, v) => p.pct ? +(v * 100).toFixed(4) : v;
+const fromUi = (p, v) => p.pct ? v / 100 : v;
+const fmtUi = (p, v) => p.pct ? minus(nf1.format(v * 100)).replace(',0', '') + '%' : minus(nf0.format(v)) + (p.unit ? ' ' + p.unit : '');
+
+// ---------- Состояние ----------
+// Ничего не сохраняется: пользователь настраивает курс и выгружает PDF.
+const clone = o => JSON.parse(JSON.stringify(o));
+const state = {name: '', horizon: 6, inputs: clone(PRESET_INPUTS)};
+let scenario = 'base';
+
+// ---------- Ввод ----------
+const groupsEl = document.getElementById('groups');
+const eqOpenState = {};
+
+function buildInputs() {
+  const N = state.horizon;
+  const groupsHtml = col => GROUPS.filter(g => g.col === col).map(g => `
+    <div class="group" data-group="${g.id}">
+      <div class="group-h"><span class="t">${g.title}</span><span class="s" data-gsum="${g.id}"></span></div>
+      ${PARAMS.filter(p => p.group === g.id).map(p => paramHtml(p, N)).join('')}
+    </div>`).join('');
+  document.getElementById('groupsL').innerHTML = groupsHtml('L');
+  document.getElementById('groupsR').innerHTML = groupsHtml('R');
+  groupsEl.querySelectorAll('.eq-cols').forEach(el => {
+    el.style.gridTemplateColumns = `repeat(${N}, minmax(0,1fr))`;
+  });
+  layoutEq();
+  syncInputs();
+}
+
+function paramHtml(p, N) {
+  const open = eqOpenState[p.key] !== undefined ? eqOpenState[p.key] : !!p.eqOpen;
+  const unit = p.pct ? '%' : p.unit;
+  const cols = Array.from({length: N}, (_, i) => `
+    <div class="eq-col">
+      <input type="number" data-k="${p.key}" data-m="${i}" step="${p.step}" aria-label="${esc(p.name)}, месяц ${i + 1}">
+      <input type="range" data-k="${p.key}" data-m="${i}" min="${p.min}" max="${p.max}" step="${p.step}" aria-label="${esc(p.name)}, месяц ${i + 1}">
+      <span class="m">М${i + 1}</span>
+    </div>`).join('');
+  const quick = p.quick ? `<div class="quick">
+      <button class="btn sm" data-quick="copy" data-k="${p.key}">Как в М1 на все месяцы</button>
+      <button class="btn sm" data-quick="grow" data-k="${p.key}">Рост +X% в месяц от М1</button>
+      <span>X =</span><input type="number" value="20" step="1" data-growx="${p.key}" aria-label="Рост в месяц, %"><span>%</span>
+    </div>` : '';
+  return `
+    <div class="param" data-param="${p.key}">
+      <div class="prow">
+        <div class="pinfo"><div class="pname">${p.name}</div><div class="pdesc">${p.desc} · <span class="mixed" data-mixed="${p.key}"></span></div></div>
+        <input type="range" data-k="${p.key}" data-all="1" min="${p.min}" max="${p.max}" step="${p.step}" aria-label="${esc(p.name)}, все месяцы">
+        <div class="numbox"><input type="number" data-k="${p.key}" data-all="1" step="${p.step}" aria-label="${esc(p.name)}, все месяцы"><span>${unit}</span></div>
+      </div>
+      <button class="toggle" data-toggle="${p.key}">По месяцам ${open ? '▴' : '▾'}</button>
+      <div class="eq ${open ? 'open' : ''}" data-eq="${p.key}"><div class="eq-cols">${cols}</div>${quick}</div>
+    </div>`;
+}
+
+function layoutEq() {
+  const narrow = window.innerWidth < 700;
+  const N = state.horizon;
+  const per = narrow && N > 6 ? Math.ceil(N / 2) : N;
+  groupsEl.querySelectorAll('.eq-cols').forEach(el => el.style.gridTemplateColumns = `repeat(${per}, minmax(0,1fr))`);
+}
+window.addEventListener('resize', () => state && layoutEq());
+
+function syncInputs() {
+  const N = state.horizon;
+  const active = document.activeElement;
+  PARAMS.forEach(p => {
+    const arr = state.inputs[p.key].slice(0, N);
+    const lo = Math.min(...arr), hi = Math.max(...arr);
+    const same = lo === hi;
+    const allVal = toUi(p, arr[0]);
+    groupsEl.querySelectorAll(`[data-k="${p.key}"][data-all]`).forEach(el => {
+      if (el === active && el.type === 'number') return;
+      el.value = allVal;
+    });
+    const mixed = groupsEl.querySelector(`[data-mixed="${p.key}"]`);
+    if (mixed) mixed.textContent = same ? 'на все месяцы' : `разные: ${fmtUi(p, lo)}–${fmtUi(p, hi)}`;
+    groupsEl.querySelectorAll(`[data-k="${p.key}"][data-m]`).forEach(el => {
+      if (el === active && el.type === 'number') return;
+      el.value = toUi(p, state.inputs[p.key][+el.dataset.m]);
+    });
+  });
+  document.getElementById('horizon').value = N;
+  const hn = document.getElementById('horizonNum');
+  if (hn !== active) hn.value = N;
+  document.getElementById('horizonLbl').textContent = `${N} мес.`;
+}
+
+function setParam(key, month, uiVal) {
+  const p = PMAP[key];
+  let v = Number(uiVal);
+  if (!isFinite(v)) return;
+  if (v < 0) v = 0;
+  if (p.pct && v > 100) v = 100;
+  v = fromUi(p, v);
+  if (month === null) for (let i = 0; i < MONTHS; i++) state.inputs[key][i] = v;
+  else state.inputs[key][month] = v;
+}
+
+groupsEl.addEventListener('input', e => {
+  const t = e.target;
+  if (!t.dataset.k) return;
+  if (t.type === 'number' && t.value === '') return;
+  setParam(t.dataset.k, t.dataset.all ? null : +t.dataset.m, t.value);
+  syncInputs(); renderAll(false);
+});
+groupsEl.addEventListener('change', e => { if (e.target.dataset.k) { syncInputs(); renderAll(false); } });
+groupsEl.addEventListener('click', e => {
+  const tg = e.target.closest('[data-toggle]');
+  if (tg) {
+    const k = tg.dataset.toggle, eq = groupsEl.querySelector(`[data-eq="${k}"]`);
+    const open = !eq.classList.contains('open');
+    eq.classList.toggle('open', open); eqOpenState[k] = open;
+    tg.textContent = `По месяцам ${open ? '▴' : '▾'}`;
+    return;
+  }
+  const q = e.target.closest('[data-quick]');
+  if (q) {
+    const k = q.dataset.k, p = PMAP[k], a = state.inputs[k];
+    if (q.dataset.quick === 'copy') for (let i = 1; i < MONTHS; i++) a[i] = a[0];
+    else {
+      const x = Number(groupsEl.querySelector(`[data-growx="${k}"]`).value) / 100 || 0;
+      for (let i = 1; i < MONTHS; i++) a[i] = Math.round(a[0] * Math.pow(1 + x, i) / p.step) * p.step;
+    }
+    syncInputs(); renderAll(false);
+  }
+});
+
+function onHorizon(v) {
+  const n = Math.min(12, Math.max(3, Math.round(Number(v))));
+  if (!isFinite(n) || n === state.horizon) return;
+  state.horizon = n; buildInputs(); renderAll(false);
+}
+document.getElementById('horizon').addEventListener('input', e => onHorizon(e.target.value));
+document.getElementById('horizonNum').addEventListener('change', e => onHorizon(e.target.value));
+
+document.getElementById('btnZero').addEventListener('click', () => {
+  confirmModal('Обнулить значения?', 'Все денежные и процентные вводные во всех 12 месяцах станут 0. Горизонт останется прежним.', 'Обнулить', () => {
+    PARAMS.forEach(p => state.inputs[p.key] = Array(MONTHS).fill(0));
+    syncInputs(); renderAll(false);
+  });
+});
+
+// ---------- Сценарии ----------
+function renderChips() {
+  document.getElementById('chips').innerHTML = Object.entries(SCENARIOS)
+    .map(([k, s]) => `<button class="chip ${scenario === k ? 'on' : ''}" data-scen="${k}">${s.label}</button>`).join('');
+  document.getElementById('scenNote').classList.toggle('show', scenario !== 'base');
+}
+document.getElementById('chips').addEventListener('click', e => {
+  const b = e.target.closest('[data-scen]'); if (!b) return;
+  scenario = b.dataset.scen; renderAll(false);
+});
+
+// ---------- Отрисовка результатов ----------
+function renderAll(full = true) {
+  const N = state.horizon;
+  const sc = SCENARIOS[scenario];
+  const res = calculate(state.inputs, N, {conv: sc.conv, cpr: sc.cpr});
+  const {rows, T} = res;
+  renderHeader();
+  renderChips();
+  const noExtras = ['tax','refund','fixed','support'].every(k => state.inputs[k].slice(0, N).every(v => v === 0));
+
+  document.getElementById('scenSummary').textContent =
+    `Сценарий: ${sc.label} · ${N} мес. · бюджет ${short(T.budget)} · ${nf0.format(Math.round(T.reg_b + T.reg_a))} регистраций`;
+
+  // KPI
+  const kpis = [
+    {l:'Выручка', v: short(T.rev), h: `${N} мес. · ${one(T.paid)} оплат`},
+    {l:'Результат', v: short(T.result), c: signCls(T.result), h: noExtras ? 'до налогов и прочих расходов' : `маржа ${T.rev > 0 ? nf0.format(T.result / T.rev * 100) : 0}%`},
+    {l:'Окупаемость', v: res.payback === null ? 'нет' : `Месяц ${res.payback + 1}`, c: res.payback === null ? 'neg' : 'pos', h: res.payback === null ? `не окупается за ${N} мес.` : 'накопленный итог ≥ 0 до конца'},
+    {l:'Макс. просадка', v: res.drawdown ? short(res.drawdown.value) : '0 ₽', c: res.drawdown ? 'neg' : '', h: res.drawdown ? `в месяце ${res.drawdown.month + 1} · столько нужно до окупаемости` : 'накопленный итог не уходит в минус'},
+    {l:'Стартовые вложения', v: short(res.startInvest), h: 'разработка + реклама М1'},
+    {l:'Стоимость оплаты с рекламы', v: short(T.costPerPaidAd), h: `выручка / реклама ${ratio(T.romi)}`},
+  ];
+  document.getElementById('kpis').innerHTML = kpis.map(k =>
+    `<div class="card kpi"><div class="lbl">${k.l}</div><div class="val ${k.c || ''}">${k.v}</div><div class="hint">${k.h}</div></div>`).join('');
+
+  // Сводки групп
+  const avg = k => state.inputs[k].slice(0, N).reduce((s, v) => s + v, 0) / N;
+  const gs = {
+    traffic: `чек ≈ ${money(avg('check'))} · регистрация ≈ ${money(avg('cpr'))}`,
+    base: `≈ ${one(T.paid_b)} оплат из базы`,
+    ads: `≈ ${one(T.paid_a)} оплат с рекламы`,
+    budget: `≈ ${short(T.budget)} на рекламу за ${N} мес.`,
+    extra: `≈ ${short(T.extra)} за ${N} мес.`,
+  };
+  Object.entries(gs).forEach(([g, s]) => { const el = groupsEl.querySelector(`[data-gsum="${g}"]`); if (el) el.textContent = s; });
+
+  // Экономика по месяцам
+  const pb = res.payback;
+  const head = `<tr><th>₽</th>${rows.map((_, i) => `<th class="${i === pb ? 'pb' : ''}">М${i + 1}</th>`).join('')}<th class="total-col">Итого</th></tr>`;
+  const line = (label, key, opts = {}) => {
+    const cells = rows.map((r, i) => {
+      const v = r[key];
+      return `<td class="${i === pb ? 'pb' : ''} ${opts.sign ? signCls(v) : ''}">${opts.fmt ? opts.fmt(v) : money(v)}</td>`;
+    }).join('');
+    const tv = opts.total === undefined ? T[key] : opts.total;
+    return `<tr class="${opts.cls || ''}"><td>${label}</td>${cells}<td class="total-col ${opts.sign ? signCls(tv) : ''}">${tv === '' ? '' : (opts.fmt ? opts.fmt(tv) : money(tv))}</td></tr>`;
+  };
+  document.getElementById('econTable').innerHTML = head +
+    line('Выручка', 'rev', {cls:'strong'}) +
+    line('из базы', 'rev_b', {cls:'sub'}) +
+    line('с рекламы', 'rev_a', {cls:'sub'}) +
+    line('Реклама', 'budget') +
+    line('Разработка', 'dev') +
+    line('Доп. расходы', 'extra') +
+    line('Результат', 'result', {cls:'strong', sign:true}) +
+    line('Накопленный', 'cum', {cls:'strong', sign:true});
+  document.getElementById('econTotal').innerHTML = `<span class="${signCls(T.result)}">${money(T.result)}</span>`;
+  document.getElementById('econHint').textContent = noExtras
+    ? 'не чистая прибыль: налоги и прочие расходы не введены'
+    : `маржа ${T.rev > 0 ? nf1.format(T.result / T.rev * 100) : 0}% · ${N} мес.`;
+
+  const f = v => one(v);
+  document.getElementById('funnelTable').innerHTML =
+    `<tr><th>чел</th>${rows.map((_, i) => `<th>М${i + 1}</th>`).join('')}<th class="total-col">Итого</th></tr>` +
+    line('Регистрации из базы', 'reg_b', {fmt:f}) + line('Регистрации с рекламы', 'reg_a', {fmt:f}) +
+    line('Пришли из базы', 'came_b', {fmt:f}) + line('Пришли с рекламы', 'came_a', {fmt:f}) +
+    line('Заказы из базы', 'ord_nb', {fmt:f}) + line('Заказы с рекламы', 'ord_na', {fmt:f}) +
+    line('Оплаты из базы', 'paid_b', {fmt:f}) + line('Оплаты с рекламы', 'paid_a', {fmt:f}) +
+    line('Всего оплат', 'paid', {fmt:f, cls:'strong'});
+
+  renderCharts(res);
+  renderAds(res);
+  renderSens(sc);
+  renderBasis(noExtras);
+}
+
+function renderHeader() {
+  const nameEl = document.getElementById('courseName');
+  if (document.activeElement !== nameEl) nameEl.value = state.name;
+  nameEl.style.width = Math.max(14, (nameEl.value || nameEl.placeholder).length + 1) + 'ch';
+  document.title = state.name ? `${state.name} — калькулятор окупаемости` : 'Калькулятор окупаемости курса';
+  document.getElementById('printHead').textContent =
+    `Расчёт от ${new Date().toLocaleDateString('ru-RU')} · сценарий: ${SCENARIOS[scenario].label} · горизонт ${state.horizon} мес.`;
+}
+
+// ---------- Графики (SVG) ----------
+// SVG получает готовые цвета, а не var(--…): так графики корректно попадают в PDF.
+function svgVars(svg) {
+  const cs = getComputedStyle(document.body);
+  return svg.replace(/var\(--([a-z0-9-]+)\)/g, (_, n) => cs.getPropertyValue('--' + n).trim());
+}
+
+function renderCharts(res) {
+  const {rows, payback} = res;
+  const N = rows.length, W = 600, H = 260, L = 64, R = 12, Tp = 16, B = 30;
+  const iw = W - L - R, ih = H - Tp - B, bw = iw / N;
+  const pw = Math.round(document.getElementById('chartCum').clientWidth || W), ph = Math.round(pw * H / W);
+  const axis = (lo, hi) => {
+    const span = hi - lo || 1, step0 = span / 4, mag = Math.pow(10, Math.floor(Math.log10(step0)));
+    const step = [1, 2, 2.5, 5, 10].map(x => x * mag).find(x => x >= step0);
+    const a = Math.floor(lo / step) * step, b = Math.ceil(hi / step) * step;
+    const ticks = []; for (let v = a; v <= b + step / 2; v += step) ticks.push(v);
+    return {a, b, ticks};
+  };
+  const grid = (ax, y) => ax.ticks.map(v => `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="${v === 0 ? 1.5 : 1}" ${v === 0 ? '' : 'stroke-dasharray="2 4"'}/><text x="${L - 8}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="var(--dim)" font-family="var(--mono)">${short(v).replace(' ₽', '')}</text>`).join('');
+  const xl = rows.map((_, i) => `<text x="${L + bw * i + bw / 2}" y="${H - 10}" text-anchor="middle" font-size="11" fill="var(--muted)">М${i + 1}</text>`).join('');
+
+  // Накопленный результат
+  const cums = rows.map(r => r.cum);
+  const ax1 = axis(Math.min(0, ...cums), Math.max(0, ...cums));
+  const y1 = v => Tp + ih - (v - ax1.a) / (ax1.b - ax1.a) * ih;
+  const bars1 = rows.map((r, i) => {
+    const x = L + bw * i + bw * 0.18, w = bw * 0.64, y0 = y1(0), yv = y1(r.cum);
+    return `<rect x="${x}" y="${Math.min(y0, yv)}" width="${w}" height="${Math.max(1, Math.abs(yv - y0))}" rx="3" fill="${r.cum >= 0 ? 'var(--acc)' : 'var(--neg)'}" opacity="${r.cum >= 0 ? 0.9 : 0.75}"><title>М${i + 1}: ${money(r.cum)}</title></rect>`;
+  }).join('');
+  const pbMark = payback === null ? '' : (() => {
+    const x = L + bw * payback + bw / 2;
+    return `<line x1="${x}" x2="${x}" y1="${Tp}" y2="${Tp + ih}" stroke="var(--acc)" stroke-dasharray="4 3"/><text x="${Math.min(x + 6, W - 90)}" y="${Tp + 12}" font-size="11" fill="var(--acc)" font-weight="600">окупаемость</text>`;
+  })();
+  document.getElementById('chartCum').innerHTML = svgVars(`<svg width="${pw}" height="${ph}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Накопленный результат по месяцам">${grid(ax1, y1)}${bars1}${pbMark}${xl}</svg>`);
+  document.getElementById('chartCumNote').textContent = payback === null
+    ? `За ${N} мес. накопленный результат не выходит в плюс устойчиво. Красные столбики — месяцы, когда вложения ещё не вернулись.`
+    : `Накопленный результат выходит в плюс в месяце ${payback + 1}. Красные столбики — просадка, то есть деньги, которые нужно иметь до окупаемости.`;
+
+  // Выручка по каналам и расходы
+  const costs = rows.map(r => r.budget + r.dev + r.extra);
+  const ax2 = axis(0, Math.max(1, ...rows.map(r => r.rev), ...costs));
+  const y2 = v => Tp + ih - (v - ax2.a) / (ax2.b - ax2.a) * ih;
+  const bars2 = rows.map((r, i) => {
+    const x = L + bw * i + bw * 0.18, w = bw * 0.64;
+    const yb = y2(r.rev_b), ya = y2(r.rev_b + r.rev_a);
+    return `<rect x="${x}" y="${yb}" width="${w}" height="${y2(0) - yb}" fill="var(--base)" opacity=".85"><title>М${i + 1}, из базы: ${money(r.rev_b)}</title></rect>` +
+      `<rect x="${x}" y="${ya}" width="${w}" height="${yb - ya}" fill="var(--ads)" opacity=".9"><title>М${i + 1}, с рекламы: ${money(r.rev_a)}</title></rect>`;
+  }).join('');
+  const pts = costs.map((c, i) => `${L + bw * i + bw / 2},${y2(c)}`).join(' ');
+  const dots = costs.map((c, i) => `<circle cx="${L + bw * i + bw / 2}" cy="${y2(c)}" r="3.5" fill="var(--neg)"><title>М${i + 1}, расходы: ${money(c)}</title></circle>`).join('');
+  document.getElementById('chartRev').innerHTML = svgVars(`<svg width="${pw}" height="${ph}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Выручка по каналам и расходы по месяцам">${grid(ax2, y2)}${bars2}<polyline points="${pts}" fill="none" stroke="var(--neg)" stroke-width="2"/>${dots}${xl}</svg>`);
+}
+
+// ---------- Экономика рекламы ----------
+function renderAds(res) {
+  const {rows, T} = res;
+  const active = rows.map((r, i) => ({r, i})).filter(x => x.r.budget > 0);
+  const bad = active.filter(x => x.r.cpr > x.r.maxCpr);
+  document.getElementById('adWarn').innerHTML = bad.length
+    ? `<div class="warn-box">В ${bad.length === 1 ? 'месяце' : 'месяцах'} ${bad.map(x => x.i + 1).join(', ')} реклама не окупает себя даже до прочих затрат: стоимость регистрации выше предельной.</div>` : '';
+  const range = arr => {
+    if (!arr.length) return 'н/д';
+    const lo = Math.min(...arr), hi = Math.max(...arr);
+    return Math.round(lo) === Math.round(hi) ? money(lo) : `${nf0.format(Math.round(lo))}–${money(hi)}`;
+  };
+  const cur = range(active.map(x => x.r.cpr));
+  const lim = range(active.map(x => x.r.maxCpr));
+  const marg = active.filter(x => x.r.cpr > 0).map(x => x.r.maxCpr / x.r.cpr - 1);
+  const minMarg = marg.length ? Math.min(...marg) : null;
+  document.getElementById('adCompare').innerHTML = `
+    <div class="card"><div class="cap">Текущая стоимость регистрации</div><div class="val">${cur}</div></div>
+    <div class="card"><div class="cap">Предельная стоимость регистрации</div><div class="val">${lim}</div></div>
+    <div class="card"><div class="cap">Запас в худшем месяце</div><div class="val ${minMarg === null ? '' : signCls(minMarg)}">${minMarg === null ? 'н/д' : minus(nf0.format(minMarg * 100)) + '%'}</div></div>`;
+  const pct = v => v === null ? 'н/д' : ratio(v);
+  const row = (label, f, total) => `<tr><td>${label}</td>${rows.map(r => `<td>${f(r)}</td>`).join('')}<td class="total-col">${total}</td></tr>`;
+  document.getElementById('adTable').innerHTML =
+    `<tr><th></th>${rows.map((_, i) => `<th>М${i + 1}</th>`).join('')}<th class="total-col">Итого</th></tr>` +
+    row('Стоимость оплаты с рекламы', r => money(r.costPerPaidAd), money(T.costPerPaidAd)) +
+    row('Выручка / расходы на рекламу', r => pct(r.romi), pct(T.romi)) +
+    row('Остаток от рекламы до прочих затрат', r => `<span class="${signCls(r.adMargin)}">${money(r.adMargin)}</span>`, `<span class="${signCls(T.adMargin)}">${money(T.adMargin)}</span>`) +
+    row('Предельная стоимость регистрации', r => money(r.maxCpr), '') +
+    row('Текущая стоимость регистрации', r => money(r.cpr), '');
+}
+
+// ---------- Чувствительность ----------
+function renderSens(sc) {
+  const N = state.horizon;
+  const vals = SENS.map(dc => SENS.map(dp => calculate(state.inputs, N, {conv: sc.conv, cpr: sc.cpr * (1 + dc), pay: 1 + dp}).T.result));
+  const flat = vals.flat(), maxAbs = Math.max(1, ...flat.map(Math.abs));
+  const lbl = d => d === 0 ? 'как в модели' : (d > 0 ? '+' : '−') + Math.abs(d * 100) + '%';
+  const color = v => {
+    const a = Math.min(1, Math.abs(v) / maxAbs) * 0.45 + 0.08;
+    return v >= 0 ? `rgba(200,245,96,${a})` : `rgba(255,107,107,${a})`;
+  };
+  document.getElementById('sensTable').innerHTML =
+    `<tr><th>Регистрация \\ оплата</th>${SENS.map(d => `<th style="text-align:center">${lbl(d)}</th>`).join('')}</tr>` +
+    vals.map((r, i) => `<tr><td>${lbl(SENS[i])}</td>${r.map((v, j) => `<td class="${i === 2 && j === 2 ? 'cur' : ''}" style="background:${color(v)}">${short(v)}</td>`).join('')}</tr>`).join('');
+}
+
+function renderBasis(noExtras) {
+  const items = [
+    'Модель помесячная, месяцы условные, дата запуска не задана, даты внутри месяца не учитываются.',
+    'Воронка базы считается так же, как рекламная, но со своими конверсиями. Повторные продажи и дожимы не заложены.',
+    'Вся стоимость курса поступает в месяц продажи. Разработка оплачивается в месяцы, где она указана.',
+    'Дробные оплаты — математическое ожидание, расчёт без округления.',
+    'Проценты дополнительных расходов применяются к валовой выручке независимо друг от друга.',
+  ];
+  if (noExtras) items.push('Налоги, возвраты, команда и сопровождение равны нулю — результат не является чистой прибылью.');
+  items.push('Модель не является гарантией продаж: после первого месяца подставьте фактические конверсии и стоимость регистрации.');
+  document.getElementById('basis').innerHTML = items.map(t => `<li>${t}</li>`).join('');
+}
+
+// ---------- Название курса ----------
+const nameEl = document.getElementById('courseName');
+nameEl.addEventListener('input', () => { state.name = nameEl.value; renderHeader(); });
+nameEl.addEventListener('keydown', e => { if (e.key === 'Enter') nameEl.blur(); });
+nameEl.addEventListener('blur', () => { state.name = nameEl.value.trim(); renderHeader(); });
+
+// ---------- Модальные окна ----------
+const modalBg = document.getElementById('modalBg'), modalEl = document.getElementById('modal');
+let modalCb = null;
+function modal(html, cb) { modalEl.innerHTML = html; modalCb = cb; modalBg.classList.add('show'); }
+function closeModal() { modalBg.classList.remove('show'); modalEl.innerHTML = ''; modalCb = null; }
+modalEl.addEventListener('click', async e => {
+  const b = e.target.closest('[data-a]'); if (!b) return;
+  const cb = modalCb;
+  if (cb) await cb(b.dataset.a);
+  if (modalCb === cb) closeModal();
+});
+modalBg.addEventListener('click', e => { if (e.target === modalBg) closeModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && modalBg.classList.contains('show')) closeModal(); });
+function confirmModal(title, text, okLabel, onOk) {
+  modal(`<h3>${title}</h3><p>${text}</p><div class="acts"><button class="btn" data-a="cancel">Отмена</button><button class="btn acc" data-a="ok">${okLabel}</button></div>`,
+    a => { if (a === 'ok') return onOk(); });
+}
+
+// ---------- PDF и печать ----------
+// Светлая «бумажная» версия (класс paper) — и для печати, и для скачивания PDF.
+const funnelDetails = document.getElementById('funnelDetails');
+let funnelWasOpen = false;
+function paperOn() {
+  funnelWasOpen = funnelDetails.open; funnelDetails.open = true;
+  document.body.classList.add('paper');
+  document.body.classList.toggle('wide', state.horizon > 6);
+  renderAll();
+}
+function paperOff() { document.body.classList.remove('paper', 'wide'); funnelDetails.open = funnelWasOpen; renderAll(); }
+window.addEventListener('beforeprint', paperOn);
+window.addEventListener('afterprint', paperOff);
+
+// Разрыв страницы запрещён только внутри небольших блоков: большие карточки и таблицы переносятся по строкам.
+const pdfOptions = () => ({
+  margin: [8, 8, 8, 8],
+  filename: pdfName(),
+  image: {type: 'jpeg', quality: 0.95},
+  // Ширина окна без полосы прокрутки, иначе содержимое в PDF съезжает вправо.
+  html2canvas: {scale: 2, backgroundColor: '#ffffff', scrollX: 0, scrollY: 0, windowWidth: document.documentElement.clientWidth},
+  jsPDF: {unit: 'mm', format: 'a4', orientation: state.horizon > 6 ? 'landscape' : 'portrait'},
+  pagebreak: {mode: ['css'], avoid: ['.top', 'h1', '.kpi', '.econ-head', '.section-h', 'tr', '.chart', '.ad-compare', '.basis']},
+});
+const pdfName = () => `${(state.name.trim() || 'Курс').replace(/[\/:*?"<>|]+/g, '_')} — окупаемость.pdf`;
+
+// Внутри claude.ai страница не может сама скачать файл или открыть печать:
+// PDF отдаётся через сохранение claude.ai (capability downloads), кнопка «Печать» скрыта.
+// Открытая как обычный файл, страница скачивает PDF сама.
+const inClaude = !!(window.claude && typeof window.claude.use === 'function');
+const claudeDownloads = inClaude ? window.claude.use('downloads').catch(() => null) : Promise.resolve(null);
+const btnPdf = document.getElementById('btnPdf'), btnPrint = document.getElementById('btnPrint');
+if (inClaude) btnPrint.hidden = true;
+
+function flashPdfButton(text) {
+  btnPdf.textContent = text;
+  setTimeout(() => { btnPdf.textContent = 'Скачать PDF'; }, 3500);
+}
+function saveBlobLocally(blob, filename) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+async function downloadPdf() {
+  if (typeof window.html2pdf !== 'function') {
+    if (inClaude) flashPdfButton('PDF не загрузился, обновите страницу'); else window.print();
+    return;
+  }
+  btnPdf.disabled = true; btnPdf.textContent = 'Готовлю PDF…';
+  let blob = null;
+  paperOn();
+  try {
+    if (document.fonts && document.fonts.ready) await document.fonts.ready;
+    blob = await window.html2pdf().set(pdfOptions()).from(document.querySelector('.wrap')).outputPdf('blob');
+  } catch (e) { blob = null; }
+  paperOff();
+  btnPdf.disabled = false; btnPdf.textContent = 'Скачать PDF';
+  if (!blob) { if (inClaude) flashPdfButton('Не получилось собрать PDF'); else window.print(); return; }
+
+  const downloads = await claudeDownloads;
+  if (!downloads) { saveBlobLocally(blob, pdfName()); return; }
+  try {
+    await downloads.save({filename: pdfName(), data: blob});
+    flashPdfButton('PDF сохранён');
+  } catch (e) {
+    if (e && e.code === 'declined') return;
+    flashPdfButton(e && e.code === 'rate_limited' ? 'Подождите и нажмите ещё раз' : 'Сохранение недоступно');
+  }
+}
+btnPdf.addEventListener('click', downloadPdf);
+btnPrint.addEventListener('click', () => window.print());
+// В claude.ai, где сохранение файлов недоступно, кнопку PDF прячем.
+claudeDownloads.then(d => { if (inClaude && !d) btnPdf.hidden = true; });
+
+// ---------- Старт ----------
+buildInputs();
+renderAll();
+</script>
+</body>
+</html>
