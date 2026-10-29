@@ -116,6 +116,12 @@ details.funnel summary{cursor:pointer;color:var(--blue);font-size:12px;margin-bo
 .warn-box{padding:10px 12px;border-radius:10px;background:#2a1414;border:1px solid #5a2626;color:#ffb3b3;font-size:12px;margin-bottom:12px}
 .sens td{text-align:center;font-weight:600}
 .sens td.cur{outline:2px solid var(--acc);outline-offset:-2px}
+.scen-tbl th:not(:first-child),.scen-tbl td:not(:first-child){width:24%}
+.scen-tbl th .mult{display:block;font-family:var(--mono);font-size:10px;font-weight:500;color:var(--dim);letter-spacing:0;margin-top:2px}
+.scen-tbl .cur{background:rgba(200,245,96,.07)}
+.scen-tbl th.cur{color:var(--acc)}
+.scen-tbl .delta{display:block;font-size:10px;color:var(--dim)}
+.scen-chart{margin-top:16px}
 .basis ul{margin:8px 0 0;padding-left:18px;color:var(--muted);font-size:12px}
 .basis li{margin:4px 0}
 .footer{color:var(--dim);font-size:12px;margin-top:16px}
@@ -159,6 +165,7 @@ body.paper .kpi .val{white-space:normal}
 body.paper .row2{grid-template-columns:1fr 1fr}
 body.paper .ad-compare{grid-template-columns:repeat(3,minmax(0,1fr))}
 body.paper .total-col{background:#f1f3f5}
+body.paper .scen-tbl .cur{background:#f4f9ec}
 body.paper .profit-box{background:#f4f9ec;border-color:#cfe3b0}
 body.paper .pill{background:#f4f9ec;border-color:#cfe3b0}
 body.paper details.funnel summary{display:none}
@@ -229,6 +236,16 @@ body.paper.wide .sens{font-size:10px}
     </div>
     <div class="tbl-wrap"><table id="econTable"></table></div>
     <details class="funnel" id="funnelDetails"><summary>Воронка по каналам ▾</summary><div class="tbl-wrap"><table id="funnelTable"></table></div></details>
+  </div>
+
+  <div class="card full">
+    <div class="section-h"><div><h2>Сводка по сценариям</h2><p>Те же вводные курса в пессимистичном, базовом и оптимистичном сценарии</p></div></div>
+    <div class="tbl-wrap"><table class="scen-tbl" id="scenTable"></table></div>
+    <div class="chart scen-chart">
+      <div class="legend" id="scenLegend"></div>
+      <div id="chartScen"></div>
+      <div class="note" id="chartScenNote"></div>
+    </div>
   </div>
 
   <div class="row2">
@@ -618,6 +635,7 @@ function renderAll(full = true) {
   renderCharts(res);
   renderAds(res);
   renderSens(sc);
+  renderScenarios();
   renderBasis(noExtras);
 }
 
@@ -637,18 +655,21 @@ function svgVars(svg) {
   return svg.replace(/var\(--([a-z0-9-]+)\)/g, (_, n) => cs.getPropertyValue('--' + n).trim());
 }
 
+// Ось с «круглыми» делениями (около 4 шагов) от lo до hi.
+function niceAxis(lo, hi) {
+  const span = hi - lo || 1, step0 = span / 4, mag = Math.pow(10, Math.floor(Math.log10(step0)));
+  const step = [1, 2, 2.5, 5, 10].map(x => x * mag).find(x => x >= step0);
+  const a = Math.floor(lo / step) * step, b = Math.ceil(hi / step) * step;
+  const ticks = []; for (let v = a; v <= b + step / 2; v += step) ticks.push(v);
+  return {a, b, ticks};
+}
+
 function renderCharts(res) {
   const {rows, payback} = res;
   const N = rows.length, W = 600, H = 260, L = 64, R = 12, Tp = 16, B = 30;
   const iw = W - L - R, ih = H - Tp - B, bw = iw / N;
   const pw = Math.round(document.getElementById('chartCum').clientWidth || W), ph = Math.round(pw * H / W);
-  const axis = (lo, hi) => {
-    const span = hi - lo || 1, step0 = span / 4, mag = Math.pow(10, Math.floor(Math.log10(step0)));
-    const step = [1, 2, 2.5, 5, 10].map(x => x * mag).find(x => x >= step0);
-    const a = Math.floor(lo / step) * step, b = Math.ceil(hi / step) * step;
-    const ticks = []; for (let v = a; v <= b + step / 2; v += step) ticks.push(v);
-    return {a, b, ticks};
-  };
+  const axis = niceAxis;
   const grid = (ax, y) => ax.ticks.map(v => `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="${v === 0 ? 1.5 : 1}" ${v === 0 ? '' : 'stroke-dasharray="2 4"'}/><text x="${L - 8}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="var(--dim)" font-family="var(--mono)">${short(v).replace(' ₽', '')}</text>`).join('');
   const xl = rows.map((_, i) => `<text x="${L + bw * i + bw / 2}" y="${H - 10}" text-anchor="middle" font-size="11" fill="var(--muted)">М${i + 1}</text>`).join('');
 
@@ -682,6 +703,63 @@ function renderCharts(res) {
   const pts = costs.map((c, i) => `${L + bw * i + bw / 2},${y2(c)}`).join(' ');
   const dots = costs.map((c, i) => `<circle cx="${L + bw * i + bw / 2}" cy="${y2(c)}" r="3.5" fill="var(--neg)"><title>М${i + 1}, расходы: ${money(c)}</title></circle>`).join('');
   document.getElementById('chartRev').innerHTML = svgVars(`<svg width="${pw}" height="${ph}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Выручка по каналам и расходы по месяцам">${grid(ax2, y2)}${bars2}<polyline points="${pts}" fill="none" stroke="var(--neg)" stroke-width="2"/>${dots}${xl}</svg>`);
+}
+
+// ---------- Сводка по сценариям ----------
+const SCEN_COLORS = {pess: 'var(--neg)', base: 'var(--blue)', opt: 'var(--acc)'};
+const multLabel = s => s.conv === 1 && s.cpr === 1 ? 'вводные без изменений'
+  : `конверсии ×${nf1.format(s.conv)} · регистрация ×${nf1.format(s.cpr)}`;
+
+function renderScenarios() {
+  const N = state.horizon;
+  const keys = Object.keys(SCENARIOS);
+  const R = Object.fromEntries(keys.map(k => [k, calculate(state.inputs, N, {conv: SCENARIOS[k].conv, cpr: SCENARIOS[k].cpr})]));
+  const cur = k => k === scenario ? 'cur' : '';
+  const baseRes = R.base.T.result;
+  const cell = (k, html) => `<td class="${cur(k)}">${html}</td>`;
+  const row = (label, f, cls = '') => `<tr class="${cls}"><td>${label}</td>${keys.map(k => cell(k, f(R[k], k))).join('')}</tr>`;
+  const signed = v => `<span class="${signCls(v)}">${money(v)}</span>`;
+  const delta = (v, k) => k === 'base' ? '' : `<span class="delta">${v - baseRes >= 0 ? '+' : '−'}${money(Math.abs(v - baseRes))} к базовому</span>`;
+
+  document.getElementById('scenTable').innerHTML =
+    `<tr><th>₽</th>${keys.map(k => `<th class="${cur(k)}">${SCENARIOS[k].label}<span class="mult">${multLabel(SCENARIOS[k])}</span></th>`).join('')}</tr>` +
+    row('Выручка', r => money(r.T.rev), 'strong') +
+    row('из базы', r => money(r.T.rev_b), 'sub') +
+    row('с рекламы', r => money(r.T.rev_a), 'sub') +
+    row('Расходы', r => money(r.T.budget + r.T.dev + r.T.extra), 'strong') +
+    row('реклама', r => money(r.T.budget), 'sub') +
+    row('разработка', r => money(r.T.dev), 'sub') +
+    row('доп. расходы', r => money(r.T.extra), 'sub') +
+    row('Результат', (r, k) => signed(r.T.result) + delta(r.T.result, k), 'strong') +
+    row('Маржа', r => r.T.rev > 0 ? minus(nf1.format(r.T.result / r.T.rev * 100)) + '%' : 'н/д') +
+    row('Регистраций', r => nf0.format(Math.round(r.T.reg_b + r.T.reg_a))) +
+    row('Оплат', r => `${one(r.T.paid)} <span class="delta">база ${one(r.T.paid_b)} · реклама ${one(r.T.paid_a)}</span>`) +
+    row('Окупаемость', r => r.payback === null ? `<span class="neg">не окупается за ${N} мес.</span>` : `<span class="pos">Месяц ${r.payback + 1}</span>`, 'strong') +
+    row('Макс. просадка', r => r.drawdown ? `<span class="neg">${money(r.drawdown.value)}</span> <span class="delta">в месяце ${r.drawdown.month + 1}</span>` : '0 ₽') +
+    row('Стоимость оплаты с рекламы', r => money(r.T.costPerPaidAd)) +
+    row('Выручка / расходы на рекламу', r => ratio(r.T.romi));
+
+  // Накопленный результат по месяцам: три линии
+  const W = 900, H = 240, L = 64, Rm = 16, Tp = 16, B = 30;
+  const iw = W - L - Rm, ih = H - Tp - B, step = N > 1 ? iw / (N - 1) : 0;
+  const pw = Math.round(document.getElementById('chartScen').clientWidth || W), ph = Math.round(pw * H / W);
+  const all = keys.flatMap(k => R[k].rows.map(r => r.cum));
+  const ax = niceAxis(Math.min(0, ...all), Math.max(0, ...all));
+  const y = v => Tp + ih - (v - ax.a) / (ax.b - ax.a) * ih;
+  const x = i => L + step * i;
+  const grid = ax.ticks.map(v => `<line x1="${L}" x2="${W - Rm}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="${v === 0 ? 1.5 : 1}" ${v === 0 ? '' : 'stroke-dasharray="2 4"'}/><text x="${L - 8}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="var(--dim)" font-family="var(--mono)">${short(v).replace(' ₽', '')}</text>`).join('');
+  const xl = Array.from({length: N}, (_, i) => `<text x="${x(i)}" y="${H - 10}" text-anchor="middle" font-size="11" fill="var(--muted)">М${i + 1}</text>`).join('');
+  const lines = keys.map(k => {
+    const pts = R[k].rows.map((r, i) => `${x(i)},${y(r.cum)}`).join(' ');
+    const dots = R[k].rows.map((r, i) => `<circle cx="${x(i)}" cy="${y(r.cum)}" r="${k === scenario ? 4 : 3}" fill="${SCEN_COLORS[k]}"><title>${SCENARIOS[k].label}, М${i + 1}: ${money(r.cum)}</title></circle>`).join('');
+    return `<polyline points="${pts}" fill="none" stroke="${SCEN_COLORS[k]}" stroke-width="${k === scenario ? 3 : 2}"/>${dots}`;
+  }).join('');
+  document.getElementById('chartScen').innerHTML = svgVars(`<svg width="${pw}" height="${ph}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Накопленный результат по сценариям">${grid}${lines}${xl}</svg>`);
+  document.getElementById('scenLegend').innerHTML = keys.map(k =>
+    `<span><i style="background:${SCEN_COLORS[k]};height:3px;vertical-align:3px"></i>${SCENARIOS[k].label}</span>`).join('');
+  const pbText = k => R[k].payback === null ? 'не окупается' : `окупается в месяце ${R[k].payback + 1}`;
+  document.getElementById('chartScenNote').textContent =
+    `Накопленный результат по месяцам. Пессимистичный ${pbText('pess')}, базовый ${pbText('base')}, оптимистичный ${pbText('opt')}.`;
 }
 
 // ---------- Экономика рекламы ----------
