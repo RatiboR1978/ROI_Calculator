@@ -56,8 +56,8 @@ h1{font-size:30px;line-height:1.15;margin:18px 0 6px;font-weight:700}
 .chip{border:1px solid var(--line);background:var(--card2);border-radius:999px;padding:6px 14px;font-size:13px}
 .chip.on{background:var(--acc);color:var(--acc-ink);border-color:var(--acc);font-weight:600}
 .summary{color:var(--muted);font-size:12px}
-.scen-note{display:none;margin-top:10px;padding:8px 12px;border-radius:10px;background:#1d2410;border:1px solid #3d4a1f;color:var(--acc);font-size:12px}
-.scen-note.show{display:block}
+.scen-note{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px;padding:8px 12px;border-radius:10px;background:#1d2410;border:1px solid #3d4a1f;color:var(--acc);font-size:12px}
+.scen-note span{margin-right:auto}
 
 .inputs-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 16px;align-items:start}
 .group{background:var(--card2);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px}
@@ -168,6 +168,7 @@ body.paper .row2{grid-template-columns:1fr 1fr}
 body.paper .ad-compare{grid-template-columns:repeat(3,minmax(0,1fr))}
 body.paper .total-col{background:#f1f3f5}
 body.paper .scen-tbl .cur{background:#f4f9ec}
+body.paper .scen-tbl .mult{display:none}
 body.paper .profit-box{background:#f4f9ec;border-color:#cfe3b0}
 body.paper .pill{background:#f4f9ec;border-color:#cfe3b0}
 body.paper details.funnel summary{display:none}
@@ -214,7 +215,7 @@ body.paper.wide .sens{font-size:10px}
     <div class="section-h"><div><h2>Вводные данные</h2><p>Ползунок или точное значение — результаты пересчитываются сразу</p></div></div>
     <div class="chips" id="chips"></div>
     <div class="summary" id="scenSummary"></div>
-    <div class="scen-note" id="scenNote">Сценарий применяется поверх ваших вводных: ползунки показывают базовые значения курса.</div>
+    <div class="scen-note" id="scenNote"></div>
     <div class="inputs-cols" id="groups">
       <div>
         <div class="group">
@@ -242,7 +243,7 @@ body.paper.wide .sens{font-size:10px}
   </div>
 
   <div class="card full">
-    <div class="section-h"><div><h2>Сводка по сценариям</h2><p>Те же вводные курса в пессимистичном, базовом и оптимистичном сценарии</p></div></div>
+    <div class="section-h"><div><h2>Сводка по сценариям</h2><p>Каждый сценарий считается на своих вводных; выбранный сценарий подсвечен</p></div></div>
     <div class="tbl-wrap"><table class="scen-tbl" id="scenTable"></table></div>
     <div class="chart scen-chart">
       <div class="legend" id="scenLegend"></div>
@@ -275,7 +276,7 @@ body.paper.wide .sens{font-size:10px}
   <div class="card full">
     <div class="section-h"><div><h2>Чувствительность результата</h2><p>Результат за горизонт при изменении стоимости регистрации и конверсии «заказ → оплата»</p></div></div>
     <div class="tbl-wrap"><table class="sens" id="sensTable"></table></div>
-    <div class="chart"><div class="note">Строки — стоимость регистрации с рекламы, столбцы — конверсия «заказ → оплата» в обоих каналах во всех месяцах (не выше 100%). Рамка — текущий сценарий.</div></div>
+    <div class="chart"><div class="note">Строки — стоимость регистрации с рекламы, столбцы — конверсия «заказ → оплата» в обоих каналах во всех месяцах (не выше 100%). Считается на вводных выбранного сценария, рамка — его текущие значения.</div></div>
   </div>
 
   <div class="card full basis">
@@ -341,11 +342,22 @@ const PRESET_INPUTS = {
   fixed: ext([0,0,0,0,0,0]),
   support: ext([0,0,0,0,0,0]),
 };
+// У каждого сценария свой полный набор вводных. conv/cpr задают только стартовые значения
+// пессимистичного и оптимистичного сценариев: базовые конверсии и стоимость регистрации,
+// умноженные на эти коэффициенты. Дальше наборы меняются независимо.
 const SCENARIOS = {
   pess: {label:'Пессимистичный', conv:0.9, cpr:1.2},
   base: {label:'Базовый', conv:1, cpr:1},
   opt: {label:'Оптимистичный', conv:1.1, cpr:0.8},
 };
+const round6 = v => Math.round(v * 1e6) / 1e6;
+function scenarioStart(base, s) {
+  const out = JSON.parse(JSON.stringify(base));
+  CONV_KEYS.forEach(k => out[k] = out[k].map(v => round6(Math.min(1, v * s.conv))));
+  out.cpr = out.cpr.map(v => round6(v * s.cpr));
+  return out;
+}
+const startSets = base => Object.fromEntries(Object.entries(SCENARIOS).map(([k, s]) => [k, scenarioStart(base, s)]));
 const SENS = [-0.2, -0.1, 0, 0.1, 0.2];
 
 // ---------- Расчёт ----------
@@ -415,30 +427,50 @@ const fromUi = (p, v) => p.pct ? v / 100 : v;
 const fmtUi = (p, v) => p.pct ? minus(nf1.format(v * 100)).replace(',0', '') + '%' : minus(nf0.format(v)) + (p.unit ? ' ' + p.unit : '');
 
 // ---------- Состояние ----------
-// Настройки (название, горизонт, вводные, сценарий) запоминаются в браузере пользователя
-// и восстанавливаются при следующем открытии. Если хранилище недоступно, страница просто
-// открывается со стартовыми значениями.
+// Название и горизонт общие, вводные — свои у каждого сценария (state.sets).
+// state.inputs — вводные выбранного сценария: их показывают и меняют ползунки.
+// Всё это запоминается в браузере пользователя и восстанавливается при следующем открытии.
+// Если хранилище недоступно, страница просто открывается со стартовыми значениями.
 const clone = o => JSON.parse(JSON.stringify(o));
-const state = {name: '', horizon: 6, inputs: clone(PRESET_INPUTS)};
+const state = {name: '', horizon: 6, sets: startSets(PRESET_INPUTS)};
 let scenario = 'base';
+Object.defineProperty(state, 'inputs', {
+  get: () => state.sets[scenario],
+  set: v => { state.sets[scenario] = v; },
+});
 
-const STORE_KEY = 'roi-calculator:v1';
+const STORE_KEY = 'roi-calculator:v2';
+const STORE_KEY_V1 = 'roi-calculator:v1'; // одна общая таблица вводных, до раздельных сценариев
+function readInputs(src, fallback) {
+  const out = {};
+  PARAMS.forEach(p => {
+    const a = src && Array.isArray(src[p.key]) ? src[p.key] : [];
+    out[p.key] = Array.from({length: MONTHS}, (_, i) =>
+      typeof a[i] === 'number' && isFinite(a[i]) && a[i] >= 0 ? a[i] : fallback[p.key][i]);
+  });
+  return out;
+}
 function loadSaved() {
-  let saved = null;
-  try { saved = JSON.parse(window.localStorage.getItem(STORE_KEY)); } catch (e) { return; }
+  let saved = null, v1 = false;
+  try {
+    saved = JSON.parse(window.localStorage.getItem(STORE_KEY));
+    if (!saved) { saved = JSON.parse(window.localStorage.getItem(STORE_KEY_V1)); v1 = !!saved; }
+  } catch (e) { return; }
   if (!saved || typeof saved !== 'object') return;
   if (typeof saved.name === 'string') state.name = saved.name.slice(0, 120);
   const h = Number(saved.horizon);
   if (isFinite(h)) state.horizon = Math.min(12, Math.max(3, Math.round(h)));
   if (SCENARIOS[saved.scenario]) scenario = saved.scenario;
-  PARAMS.forEach(p => {
-    const src = saved.inputs && Array.isArray(saved.inputs[p.key]) ? saved.inputs[p.key] : [];
-    state.inputs[p.key] = Array.from({length: MONTHS}, (_, i) =>
-      typeof src[i] === 'number' && isFinite(src[i]) && src[i] >= 0 ? src[i] : PRESET_INPUTS[p.key][i]);
-  });
+  if (v1) {
+    // Старые сохранённые вводные становятся базовым сценарием, остальные строятся от них.
+    state.sets = startSets(readInputs(saved.inputs, PRESET_INPUTS));
+  } else {
+    const starts = startSets(PRESET_INPUTS);
+    Object.keys(SCENARIOS).forEach(k => { state.sets[k] = readInputs(saved.sets && saved.sets[k], starts[k]); });
+  }
 }
 function saveNow() {
-  try { window.localStorage.setItem(STORE_KEY, JSON.stringify({name: state.name, horizon: state.horizon, inputs: state.inputs, scenario})); } catch (e) {}
+  try { window.localStorage.setItem(STORE_KEY, JSON.stringify({name: state.name, horizon: state.horizon, scenario, sets: state.sets})); } catch (e) {}
 }
 let saveTimer = null;
 function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(saveNow, 300); }
@@ -572,34 +604,46 @@ document.getElementById('horizon').addEventListener('input', e => onHorizon(e.ta
 document.getElementById('horizonNum').addEventListener('change', e => onHorizon(e.target.value));
 
 document.getElementById('btnZero').addEventListener('click', () => {
-  confirmModal('Обнулить значения?', 'Все денежные и процентные вводные во всех 12 месяцах станут 0. Горизонт останется прежним.', 'Обнулить', () => {
+  confirmModal('Обнулить значения?', `Все вводные сценария «${SCENARIOS[scenario].label}» во всех 12 месяцах станут 0. Остальные сценарии и горизонт не изменятся.`, 'Обнулить', () => {
     PARAMS.forEach(p => state.inputs[p.key] = Array(MONTHS).fill(0));
     syncInputs(); renderAll(false);
   });
 });
 document.getElementById('btnPreset').addEventListener('click', () => {
-  confirmModal('Вернуть пример?', 'Все вводные, горизонт и сценарий вернутся к стартовому примеру. Название курса останется.', 'Вернуть', () => {
-    state.inputs = clone(PRESET_INPUTS); state.horizon = 6; scenario = 'base';
+  confirmModal('Вернуть пример?', 'Вводные всех трёх сценариев и горизонт вернутся к стартовому примеру. Название курса останется.', 'Вернуть', () => {
+    state.sets = startSets(PRESET_INPUTS); state.horizon = 6; scenario = 'base';
     buildInputs(); renderAll(false);
   });
 });
 
 // ---------- Сценарии ----------
+// Чип выбирает, вводные какого сценария показывают и меняют ползунки.
 function renderChips() {
   document.getElementById('chips').innerHTML = Object.entries(SCENARIOS)
     .map(([k, s]) => `<button class="chip ${scenario === k ? 'on' : ''}" data-scen="${k}">${s.label}</button>`).join('');
-  document.getElementById('scenNote').classList.toggle('show', scenario !== 'base');
+  const others = Object.keys(SCENARIOS).filter(k => k !== scenario);
+  document.getElementById('scenNote').innerHTML =
+    `<span>Ползунки меняют вводные сценария «${SCENARIOS[scenario].label}». У каждого сценария свои значения.</span>` +
+    others.map(k => `<button class="btn sm" data-copy="${k}">Скопировать из «${SCENARIOS[k].label}»</button>`).join('');
 }
 document.getElementById('chips').addEventListener('click', e => {
   const b = e.target.closest('[data-scen]'); if (!b) return;
-  scenario = b.dataset.scen; renderAll(false);
+  scenario = b.dataset.scen; syncInputs(); renderAll(false);
+});
+document.getElementById('scenNote').addEventListener('click', e => {
+  const b = e.target.closest('[data-copy]'); if (!b) return;
+  const from = b.dataset.copy;
+  confirmModal('Скопировать вводные?', `Вводные сценария «${SCENARIOS[scenario].label}» заменятся значениями из «${SCENARIOS[from].label}».`, 'Скопировать', () => {
+    state.inputs = clone(state.sets[from]);
+    syncInputs(); renderAll(false);
+  });
 });
 
 // ---------- Отрисовка результатов ----------
 function renderAll(full = true) {
   const N = state.horizon;
   const sc = SCENARIOS[scenario];
-  const res = calculate(state.inputs, N, {conv: sc.conv, cpr: sc.cpr});
+  const res = calculate(state.inputs, N);
   const {rows, T} = res;
   renderHeader();
   renderChips();
@@ -741,13 +785,11 @@ function renderCharts(res) {
 
 // ---------- Сводка по сценариям ----------
 const SCEN_COLORS = {pess: 'var(--neg)', base: 'var(--blue)', opt: 'var(--acc)'};
-const multLabel = s => s.conv === 1 && s.cpr === 1 ? 'вводные без изменений'
-  : `конверсии ×${nf1.format(s.conv)} · регистрация ×${nf1.format(s.cpr)}`;
 
 function renderScenarios() {
   const N = state.horizon;
   const keys = Object.keys(SCENARIOS);
-  const R = Object.fromEntries(keys.map(k => [k, calculate(state.inputs, N, {conv: SCENARIOS[k].conv, cpr: SCENARIOS[k].cpr})]));
+  const R = Object.fromEntries(keys.map(k => [k, calculate(state.sets[k], N)]));
   const cur = k => k === scenario ? 'cur' : '';
   const baseRes = R.base.T.result;
   const cell = (k, html) => `<td class="${cur(k)}">${html}</td>`;
@@ -756,7 +798,7 @@ function renderScenarios() {
   const delta = (v, k) => k === 'base' ? '' : `<span class="delta">${v - baseRes >= 0 ? '+' : '−'}${money(Math.abs(v - baseRes))} к базовому</span>`;
 
   document.getElementById('scenTable').innerHTML =
-    `<tr><th>₽</th>${keys.map(k => `<th class="${cur(k)}">${SCENARIOS[k].label}<span class="mult">${multLabel(SCENARIOS[k])}</span></th>`).join('')}</tr>` +
+    `<tr><th>₽</th>${keys.map(k => `<th class="${cur(k)}">${SCENARIOS[k].label}${k === scenario ? '<span class="mult">редактируется</span>' : ''}</th>`).join('')}</tr>` +
     row('Выручка', r => money(r.T.rev), 'strong') +
     row('из базы', r => money(r.T.rev_b), 'sub') +
     row('с рекламы', r => money(r.T.rev_a), 'sub') +
@@ -830,7 +872,7 @@ function renderAds(res) {
 // ---------- Чувствительность ----------
 function renderSens(sc) {
   const N = state.horizon;
-  const vals = SENS.map(dc => SENS.map(dp => calculate(state.inputs, N, {conv: sc.conv, cpr: sc.cpr * (1 + dc), pay: 1 + dp}).T.result));
+  const vals = SENS.map(dc => SENS.map(dp => calculate(state.inputs, N, {cpr: 1 + dc, pay: 1 + dp}).T.result));
   const flat = vals.flat(), maxAbs = Math.max(1, ...flat.map(Math.abs));
   const lbl = d => d === 0 ? 'как в модели' : (d > 0 ? '+' : '−') + Math.abs(d * 100) + '%';
   const color = v => {
@@ -974,7 +1016,7 @@ function addSheet(wb, name, rows, widths) {
 
 function buildWorkbook() {
   const N = state.horizon, sc = SCENARIOS[scenario];
-  const res = calculate(state.inputs, N, {conv: sc.conv, cpr: sc.cpr});
+  const res = calculate(state.inputs, N);
   const {rows, T} = res;
   const months = rows.map((_, i) => `М${i + 1}`);
   const noExtras = ['tax','refund','fixed','support'].every(k => state.inputs[k].slice(0, N).every(v => v === 0));
@@ -986,7 +1028,7 @@ function buildWorkbook() {
     ['Калькулятор окупаемости курса'],
     ['Курс', state.name.trim() || '—'],
     ['Дата расчёта', new Date().toLocaleDateString('ru-RU')],
-    ['Сценарий', `${sc.label} (${multLabel(sc)})`],
+    ['Сценарий', `${sc.label} (листы «Итоги», «По месяцам», «Реклама», «Чувствительность»)`],
     ['Горизонт, мес.', N],
     [],
     ['Выручка', xv(T.rev, XL.money)],
@@ -1030,12 +1072,11 @@ function buildWorkbook() {
 
   // Сценарии
   const keys = Object.keys(SCENARIOS);
-  const R = Object.fromEntries(keys.map(k => [k, calculate(state.inputs, N, {conv: SCENARIOS[k].conv, cpr: SCENARIOS[k].cpr})]));
+  const R = Object.fromEntries(keys.map(k => [k, calculate(state.sets[k], N)]));
   const srow = (label, f) => [label, ...keys.map(k => f(R[k]))];
   addSheet(wb, 'Сценарии', [
     [`Сводка по сценариям · ${N} мес.`],
     ['Показатель', ...keys.map(k => SCENARIOS[k].label)],
-    ['Множители', ...keys.map(k => multLabel(SCENARIOS[k]))],
     srow('Выручка', r => xv(r.T.rev, XL.money)),
     srow('  из базы', r => xv(r.T.rev_b, XL.money)),
     srow('  с рекламы', r => xv(r.T.rev_a, XL.money)),
@@ -1058,16 +1099,18 @@ function buildWorkbook() {
     ...keys.map(k => [SCENARIOS[k].label, ...R[k].rows.map(r => xv(r.cum, XL.money))]),
   ], [30, 22, 22, 22, ...months.map(() => 13)]);
 
-  // Вводные — базовые значения курса (без множителей сценария)
-  addSheet(wb, 'Вводные', [
-    ['Вводные курса (без множителей сценария)'],
+  // Вводные — отдельный блок на каждый сценарий
+  const inputRows = k => PARAMS.map(p => [
+    p.name,
+    GROUPS.find(g => g.id === p.group).title,
+    ...state.sets[k][p.key].slice(0, N).map(v => xv(v, p.pct ? XL.pct : p.unit === '₽' ? XL.money : XL.num0)),
+  ]);
+  addSheet(wb, 'Вводные', keys.flatMap((k, i) => [
+    ...(i ? [[]] : []),
+    [`Вводные · ${SCENARIOS[k].label}`],
     ['Параметр', 'Группа', ...months],
-    ...PARAMS.map(p => [
-      p.name,
-      GROUPS.find(g => g.id === p.group).title,
-      ...state.inputs[p.key].slice(0, N).map(v => xv(v, p.pct ? XL.pct : p.unit === '₽' ? XL.money : XL.num0)),
-    ]),
-  ], [32, 26, ...months.map(() => 12)]);
+    ...inputRows(k),
+  ]), [32, 26, ...months.map(() => 12)]);
 
   // Экономика рекламы
   addSheet(wb, 'Реклама', [
@@ -1087,7 +1130,7 @@ function buildWorkbook() {
     ['Строки — стоимость регистрации с рекламы, столбцы — конверсия «заказ → оплата»'],
     ['Регистрация \\ оплата', ...SENS.map(lbl)],
     ...SENS.map(dc => [lbl(dc), ...SENS.map(dp =>
-      xv(calculate(state.inputs, N, {conv: sc.conv, cpr: sc.cpr * (1 + dc), pay: 1 + dp}).T.result, XL.money))]),
+      xv(calculate(state.inputs, N, {cpr: 1 + dc, pay: 1 + dp}).T.result, XL.money))]),
   ], [22, 16, 16, 16, 16, 16]);
 
   return wb;
